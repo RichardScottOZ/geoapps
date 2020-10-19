@@ -1,5 +1,6 @@
 from . import Utils
 from . import DataMisfit
+import dask
 import numpy as np
 import matplotlib.pyplot as plt
 import warnings
@@ -209,7 +210,12 @@ class BetaEstimate_ByEig(InversionDirective):
         f = self.invProb.getFields(m, store=True, deleteWarmstart=False)
 
         x0 = np.random.rand(m.shape[0])
-        t = np.dot(x0, self.dmisfit.deriv2(m, x0, f=f))
+
+        phi_d_deriv = self.dmisfit.deriv2(m, x0, f=f)
+        if isinstance(phi_d_deriv, dask.array.Array):
+            phi_d_deriv = phi_d_deriv.compute()
+
+        t = np.dot(x0, phi_d_deriv)
         b = np.dot(x0, self.reg.deriv2(m, v=x0))
 
         self.beta0 = self.beta0_ratio * (t / b)
@@ -1428,11 +1434,8 @@ class UpdatePreconditioner(InversionDirective):
             self.opt.JtJdiag = JtJdiag
 
         diagA = self.opt.JtJdiag + self.invProb.beta * regDiag
-
-        diagA[diagA != 0] = diagA[diagA != 0] ** -1.0
-        PC = Utils.sdiag(diagA)
-
-        self.opt.approxHinv = PC
+        diagA[diagA != 0] = 1.0 / diagA[diagA != 0]
+        self.opt.approxHinv = diagA
 
     def endIter(self):
 
@@ -1449,10 +1452,8 @@ class UpdatePreconditioner(InversionDirective):
 
         # Assumes that opt.JtJdiag has been updated or static
         diagA = self.opt.JtJdiag + self.invProb.beta * regDiag
-
-        diagA[diagA != 0] = diagA[diagA != 0] ** -1.0
-        PC = Utils.sdiag(diagA)
-        self.opt.approxHinv = PC
+        diagA[diagA != 0] = 1.0 / diagA[diagA != 0]
+        self.opt.approxHinv = diagA
 
 
 class UpdateSensitivityWeights(InversionDirective):
