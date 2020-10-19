@@ -101,7 +101,7 @@ class l2_DataMisfit(BaseDataMisfit):
             survey = self.survey
             self._W = Utils.sdiag(1 / (abs(survey.dobs) * self.std + self.eps))
 
-        return self._W
+        return self._W.diagonal()
 
     @W.setter
     def W(self, value):
@@ -121,10 +121,10 @@ class l2_DataMisfit(BaseDataMisfit):
         if f is None:
             f = self.prob.fields(m)
 
-        W_res = dask.delayed(csr.dot)(self.W, self.survey.residual(m, f))
-        vec = da.from_delayed(W_res, dtype=float, shape=[self.W.shape[1]])
+        W_res = self.W * self.survey.residual(m, f)
+        # vec = da.from_delayed(W_res, dtype=float, shape=[self.W.shape[1]])
         #        R = self.W * self.survey.residual(m, f)
-        return 0.5 * da.dot(vec, vec)
+        return 0.5 * da.dot(W_res, W_res)
 
     @Utils.timeIt
     def deriv(self, m, f=None):
@@ -144,12 +144,12 @@ class l2_DataMisfit(BaseDataMisfit):
         if f is None:
             f = self.prob.fields(m)
 
-        w_d = dask.delayed(csr.dot)(self.W, self.survey.residual(m, f=f))
+        w_d = self.W ** 2.0 * self.survey.residual(m, f=f)
 
-        wtw_d = dask.delayed(csr.dot)(self.scale * w_d, self.W)
+        wtw_d = self.scale * w_d
 
-        row = da.from_delayed(wtw_d, dtype=float, shape=[self.W.shape[0]])
-        return self.prob.Jtvec(m, row, f=f)
+        # row = da.from_delayed(wtw_d, dtype=float, shape=[self.W.shape[0]])
+        return self.prob.Jtvec(m, wtw_d, f=f)
 
     @Utils.timeIt
     def deriv2(self, m, v, f=None):
@@ -169,12 +169,12 @@ class l2_DataMisfit(BaseDataMisfit):
 
         jtvec = self.prob.Jvec_approx(m, v, f=f)
 
-        w_jtvec = dask.delayed(csr.dot)(self.W, jtvec)
+        w_jtvec = self.W ** 2.0 * jtvec
 
-        wtw_jtvec = dask.delayed(csr.dot)(self.scale * w_jtvec, self.W)
+        wtw_jtvec = self.scale * w_jtvec
 
-        row = da.from_delayed(wtw_jtvec, dtype=float, shape=[self.W.shape[0]])
-        return self.prob.Jtvec_approx(m, row, f=f)
+        # row = da.from_delayed(wtw_jtvec, dtype=float, shape=[self.W.shape[0]])
+        return self.prob.Jtvec_approx(m, wtw_jtvec, f=f)
 
 
 # class l1_DataMisfit(l2_DataMisfit):
