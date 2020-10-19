@@ -202,9 +202,12 @@ class MagneticIntegral(Problem.LinearProblem):
             if W is None:
                 W = np.ones(self.G.shape[1])
 
-            self.gtgdiag = np.array(
-                da.sum(da.power(W[:, None].astype(np.float32) * self.G, 2), axis=0)
+            gtgdiag = da.sum(
+                da.power(W[:, None].astype(np.float32) * self.G, 2), axis=0
             )
+            self.gtgdiag = self.client.submit(
+                da.compute, self.client.scatter(gtgdiag)
+            ).result()[0]
 
         if self.coordinate_system == "cartesian":
             if self.modelType == "amplitude":

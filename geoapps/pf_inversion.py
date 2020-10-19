@@ -19,7 +19,7 @@ import multiprocessing
 from multiprocessing.pool import ThreadPool
 import os
 import sys
-
+from dask.distributed import Client
 import dask
 import numpy as np
 from discretize.utils import meshutils
@@ -44,151 +44,8 @@ from geoapps.simpegPF import (
 from geoapps.simpegPF.Utils import matutils, mkvc
 
 
-def active_from_xyz(mesh, xyz, grid_reference="CC", method="linear"):
-    """
-    Get active cells from xyz points
-
-    Parameters
-    ----------
-
-    :param mesh: discretize.mesh
-        Mesh object
-    :param xyz: numpy.ndarray
-        Points coordinates shape(*, mesh.dim).
-    :param grid_reference: str ['CC'] or 'N'.
-        Use cell coordinates from cells-center 'CC' or nodes 'N'.
-    :param method: str 'nearest' or ['linear'].
-        Interpolation method for the xyz points.
-
-    Returns
-    -------
-
-    :param active: numpy.array of bool
-        Vector for the active cells below xyz
-    """
-
-    assert grid_reference in [
-        "N",
-        "CC",
-    ], "Value of grid_reference must be 'N' (nodal) or 'CC' (cell center)"
-
-    dim = mesh.dim - 1
-
-    if mesh.dim == 3:
-        assert xyz.shape[1] == 3, "xyz locations of shape (*, 3) required for 3D mesh"
-        if method == "linear":
-            tri2D = Delaunay(xyz[:, :2])
-            z_interpolate = LinearNDInterpolator(tri2D, xyz[:, 2])
-        else:
-            z_interpolate = NearestNDInterpolator(xyz[:, :2], xyz[:, 2])
-    elif mesh.dim == 2:
-        assert xyz.shape[1] == 2, "xyz locations of shape (*, 2) required for 2D mesh"
-        z_interpolate = interp1d(
-            xyz[:, 0], xyz[:, 1], bounds_error=False, fill_value=np.nan, kind=method
-        )
-    else:
-        assert xyz.ndim == 1, "xyz locations of shape (*, ) required for 1D mesh"
-
-    if grid_reference == "CC":
-        locations = mesh.gridCC
-
-        if mesh.dim == 1:
-            active = np.zeros(mesh.nC, dtype="bool")
-            active[np.searchsorted(mesh.vectorCCx, xyz).max() :] = True
-            return active
-
-    elif grid_reference == "N":
-
-        if mesh.dim == 3:
-            locations = np.vstack(
-                [
-                    mesh.gridCC
-                    + (np.c_[-1, 1, 1][:, None] * mesh.h_gridded / 2.0).squeeze(),
-                    mesh.gridCC
-                    + (np.c_[-1, -1, 1][:, None] * mesh.h_gridded / 2.0).squeeze(),
-                    mesh.gridCC
-                    + (np.c_[1, 1, 1][:, None] * mesh.h_gridded / 2.0).squeeze(),
-                    mesh.gridCC
-                    + (np.c_[1, -1, 1][:, None] * mesh.h_gridded / 2.0).squeeze(),
-                ]
-            )
-
-        elif mesh.dim == 2:
-            locations = np.vstack(
-                [
-                    mesh.gridCC
-                    + (np.c_[-1, 1][:, None] * mesh.h_gridded / 2.0).squeeze(),
-                    mesh.gridCC
-                    + (np.c_[1, 1][:, None] * mesh.h_gridded / 2.0).squeeze(),
-                ]
-            )
-
-        else:
-            active = np.zeros(mesh.nC, dtype="bool")
-            active[np.searchsorted(mesh.vectorNx, xyz).max() :] = True
-
-            return active
-
-    # Interpolate z values on CC or N
-    z_xyz = z_interpolate(locations[:, :-1]).squeeze()
-
-    # Apply nearest neighbour if in extrapolation
-    ind_nan = np.isnan(z_xyz)
-
-    if np.any(ind_nan):
-        tree = cKDTree(xyz)
-        _, ind = tree.query(locations[ind_nan, :])
-        z_xyz[ind_nan] = xyz[ind, dim]
-
-    # Create an active bool of all True
-    active = np.all(
-        (locations[:, dim] < z_xyz).reshape((mesh.nC, -1), order="F"), axis=1
-    )
-
-    return active.ravel()
-
-
-def rotate_xy(xyz, center, angle):
-    R = np.r_[
-        np.c_[np.cos(np.pi * angle / 180), -np.sin(np.pi * angle / 180)],
-        np.c_[np.sin(np.pi * angle / 180), np.cos(np.pi * angle / 180)],
-    ]
-
-    locs = xyz.copy()
-    locs[:, 0] -= center[0]
-    locs[:, 1] -= center[1]
-
-    xy_rot = np.dot(R, locs[:, :2].T).T
-
-    return np.c_[xy_rot[:, 0] + center[0], xy_rot[:, 1] + center[1], locs[:, 2:]]
-
-
-def treemesh_2_octree(workspace, treemesh, parent=None):
-
-    indArr, levels = treemesh._ubc_indArr
-    ubc_order = treemesh._ubc_order
-
-    indArr = indArr[ubc_order] - 1
-    levels = levels[ubc_order]
-
-    mesh_object = Octree.create(
-        workspace,
-        name=f"Mesh",
-        origin=treemesh.x0,
-        u_count=treemesh.h[0].size,
-        v_count=treemesh.h[1].size,
-        w_count=treemesh.h[2].size,
-        u_cell_size=treemesh.h[0][0],
-        v_cell_size=treemesh.h[1][0],
-        w_cell_size=-treemesh.h[2][0],
-        octree_cells=np.c_[indArr, levels],
-        parent=parent,
-    )
-
-    return mesh_object
-
-
 def inversion(input_file):
+
     dsep = os.path.sep
     if input_file is not None:
         workDir = dsep.join(os.path.dirname(os.path.abspath(input_file)).split(dsep))
@@ -752,10 +609,11 @@ def inversion(input_file):
     else:
         parallelized = True
 
+    client = Client(processes=False)
+
     if parallelized:
         dask.config.set({"array.chunk-size": str(max_chunk_size) + "MiB"})
         dask.config.set(scheduler="threads", pool=ThreadPool(n_cpu))
-
     ###############################################################################
     # Processing
     rxLoc = survey.rxLoc
@@ -1169,6 +1027,7 @@ def inversion(input_file):
                 verbose=False,
                 max_chunk_size=max_chunk_size,
                 chunk_by_rows=chunk_by_rows,
+                client=client,
             )
 
         elif input_dict["inversion_type"] == "mag":
@@ -1184,6 +1043,7 @@ def inversion(input_file):
                 verbose=False,
                 max_chunk_size=max_chunk_size,
                 chunk_by_rows=chunk_by_rows,
+                client=client,
             )
 
         elif input_dict["inversion_type"] in ["mvi", "magnetics"]:
@@ -1200,6 +1060,7 @@ def inversion(input_file):
                 verbose=False,
                 max_chunk_size=max_chunk_size,
                 chunk_by_rows=chunk_by_rows,
+                client=client,
             )
 
         local_survey.pair(prob)
@@ -1211,7 +1072,7 @@ def inversion(input_file):
         local_misfit = DataMisfit.l2_DataMisfit(local_survey)
         local_misfit.W = 1.0 / local_survey.std
 
-        wr = prob.getJtJdiag(np.ones_like(mstart), W=local_misfit.W.diagonal())
+        wr = prob.getJtJdiag(np.ones_like(mstart), W=local_misfit.W)
 
         # activeCellsTemp = Maps.InjectActiveCells(mesh, activeCells, 1e-8)
 
@@ -1374,9 +1235,12 @@ def inversion(input_file):
         tolCG=tol_cg,
         stepOffBoundsFact=1e-8,
         LSshorten=0.25,
+        client=client,
     )
     # Create the default L2 inverse problem from the above objects
-    invProb = InvProblem.BaseInvProblem(global_misfit, reg, opt, beta=initial_beta)
+    invProb = InvProblem.BaseInvProblem(
+        global_misfit, reg, opt, beta=initial_beta, client=client
+    )
     # Add a list of directives to the inversion
     directiveList = []
 
@@ -1525,6 +1389,150 @@ def inversion(input_file):
                 },
             }
         )
+
+
+def active_from_xyz(mesh, xyz, grid_reference="CC", method="linear"):
+    """
+    Get active cells from xyz points
+
+    Parameters
+    ----------
+
+    :param mesh: discretize.mesh
+        Mesh object
+    :param xyz: numpy.ndarray
+        Points coordinates shape(*, mesh.dim).
+    :param grid_reference: str ['CC'] or 'N'.
+        Use cell coordinates from cells-center 'CC' or nodes 'N'.
+    :param method: str 'nearest' or ['linear'].
+        Interpolation method for the xyz points.
+
+    Returns
+    -------
+
+    :param active: numpy.array of bool
+        Vector for the active cells below xyz
+    """
+
+    assert grid_reference in [
+        "N",
+        "CC",
+    ], "Value of grid_reference must be 'N' (nodal) or 'CC' (cell center)"
+
+    dim = mesh.dim - 1
+
+    if mesh.dim == 3:
+        assert xyz.shape[1] == 3, "xyz locations of shape (*, 3) required for 3D mesh"
+        if method == "linear":
+            tri2D = Delaunay(xyz[:, :2])
+            z_interpolate = LinearNDInterpolator(tri2D, xyz[:, 2])
+        else:
+            z_interpolate = NearestNDInterpolator(xyz[:, :2], xyz[:, 2])
+    elif mesh.dim == 2:
+        assert xyz.shape[1] == 2, "xyz locations of shape (*, 2) required for 2D mesh"
+        z_interpolate = interp1d(
+            xyz[:, 0], xyz[:, 1], bounds_error=False, fill_value=np.nan, kind=method
+        )
+    else:
+        assert xyz.ndim == 1, "xyz locations of shape (*, ) required for 1D mesh"
+
+    if grid_reference == "CC":
+        locations = mesh.gridCC
+
+        if mesh.dim == 1:
+            active = np.zeros(mesh.nC, dtype="bool")
+            active[np.searchsorted(mesh.vectorCCx, xyz).max() :] = True
+            return active
+
+    elif grid_reference == "N":
+
+        if mesh.dim == 3:
+            locations = np.vstack(
+                [
+                    mesh.gridCC
+                    + (np.c_[-1, 1, 1][:, None] * mesh.h_gridded / 2.0).squeeze(),
+                    mesh.gridCC
+                    + (np.c_[-1, -1, 1][:, None] * mesh.h_gridded / 2.0).squeeze(),
+                    mesh.gridCC
+                    + (np.c_[1, 1, 1][:, None] * mesh.h_gridded / 2.0).squeeze(),
+                    mesh.gridCC
+                    + (np.c_[1, -1, 1][:, None] * mesh.h_gridded / 2.0).squeeze(),
+                ]
+            )
+
+        elif mesh.dim == 2:
+            locations = np.vstack(
+                [
+                    mesh.gridCC
+                    + (np.c_[-1, 1][:, None] * mesh.h_gridded / 2.0).squeeze(),
+                    mesh.gridCC
+                    + (np.c_[1, 1][:, None] * mesh.h_gridded / 2.0).squeeze(),
+                ]
+            )
+
+        else:
+            active = np.zeros(mesh.nC, dtype="bool")
+            active[np.searchsorted(mesh.vectorNx, xyz).max() :] = True
+
+            return active
+
+    # Interpolate z values on CC or N
+    z_xyz = z_interpolate(locations[:, :-1]).squeeze()
+
+    # Apply nearest neighbour if in extrapolation
+    ind_nan = np.isnan(z_xyz)
+
+    if np.any(ind_nan):
+        tree = cKDTree(xyz)
+        _, ind = tree.query(locations[ind_nan, :])
+        z_xyz[ind_nan] = xyz[ind, dim]
+
+    # Create an active bool of all True
+    active = np.all(
+        (locations[:, dim] < z_xyz).reshape((mesh.nC, -1), order="F"), axis=1
+    )
+
+    return active.ravel()
+
+
+def rotate_xy(xyz, center, angle):
+    R = np.r_[
+        np.c_[np.cos(np.pi * angle / 180), -np.sin(np.pi * angle / 180)],
+        np.c_[np.sin(np.pi * angle / 180), np.cos(np.pi * angle / 180)],
+    ]
+
+    locs = xyz.copy()
+    locs[:, 0] -= center[0]
+    locs[:, 1] -= center[1]
+
+    xy_rot = np.dot(R, locs[:, :2].T).T
+
+    return np.c_[xy_rot[:, 0] + center[0], xy_rot[:, 1] + center[1], locs[:, 2:]]
+
+
+def treemesh_2_octree(workspace, treemesh, parent=None):
+
+    indArr, levels = treemesh._ubc_indArr
+    ubc_order = treemesh._ubc_order
+
+    indArr = indArr[ubc_order] - 1
+    levels = levels[ubc_order]
+
+    mesh_object = Octree.create(
+        workspace,
+        name=f"Mesh",
+        origin=treemesh.x0,
+        u_count=treemesh.h[0].size,
+        v_count=treemesh.h[1].size,
+        w_count=treemesh.h[2].size,
+        u_cell_size=treemesh.h[0][0],
+        v_cell_size=treemesh.h[1][0],
+        w_cell_size=-treemesh.h[2][0],
+        octree_cells=np.c_[indArr, levels],
+        parent=parent,
+    )
+
+    return mesh_object
 
 
 if __name__ == "__main__":

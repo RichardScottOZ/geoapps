@@ -28,6 +28,7 @@ class GravityIntegral(Problem.LinearProblem):
     chunk_by_rows = False
     Jpath = "./sensitivity.zarr"
     maxRAM = 8  # Maximum memory usage
+    _client = None
 
     def __init__(self, mesh, **kwargs):
         Problem.BaseProblem.__init__(self, mesh, **kwargs)
@@ -105,10 +106,12 @@ class GravityIntegral(Problem.LinearProblem):
             if W is None:
                 W = np.ones(self.G.shape[1])
 
-            self.gtgdiag = da.sum(
+            gtgdiag = da.sum(
                 da.power(W[:, None].astype(np.float32) * self.G, 2), axis=0
-            ).compute()
-
+            )
+            self.gtgdiag = self.client.submit(
+                da.compute, self.client.scatter(gtgdiag)
+            ).result()[0]
             # for ii in range(self.G.shape[0]):
 
             #     self.gtgdiag += (w[ii]*self.G[ii, :]*dmudm)**2.
@@ -129,9 +132,10 @@ class GravityIntegral(Problem.LinearProblem):
     def Jvec(self, m, v, f=None):
         dmudm = self.rhoMap.deriv(m)
 
-        dmudm_v = da.from_array(dmudm * v, chunks=self.G.chunks[1])
+        dmudm_v = dask.delayed(csr.dot)(dmudm.tocsr(), v)
+        dmudm_v = da.from_delayed(dmudm_v, dtype=np.float32, shape=[self.G.shape[1]])
 
-        return da.dot(self.G, dmudm_v.astype(np.float32))
+        return da.dot(self.G, dmudm_v)
 
     def Jtvec(self, m, v, f=None):
 
@@ -171,7 +175,6 @@ class GravityIntegral(Problem.LinearProblem):
         if m is not None:
             self.model = self.rhoMap * m
 
-        print("Multiplication")
         self.rxLoc = self.survey.srcField.rxList[0].locs
         self.nD = int(self.rxLoc.shape[0])
 
@@ -194,6 +197,7 @@ class GravityIntegral(Problem.LinearProblem):
             maxRAM=self.maxRAM,
             max_chunk_size=self.max_chunk_size,
             chunk_by_rows=self.chunk_by_rows,
+            client=self.client,
         )
 
         G = job.calculate()
@@ -221,6 +225,7 @@ class Forward:
 
     max_chunk_size = None
     Jpath = "./sensitivity.zarr"
+    client = None
 
     def __init__(self, **kwargs):
         super().__init__()
@@ -336,7 +341,11 @@ class Forward:
 
                 with ProgressBar():
                     print("Forward calculation: ")
-                    pred = da.dot(stack, self.model).compute()
+                    mat_vec = da.dot(stack, self.model)
+
+                    pred = self.client.submit(
+                        da.compute, self.client.scatter(mat_vec)
+                    ).result()[0]
 
                 return pred
 
@@ -365,15 +374,12 @@ class Forward:
                             "Zarr file detected with wrong shape and chunksize ... over-writing"
                         )
 
+                mat = stack.to_zarr(self.Jpath, compute=False, overwrite=True)
+
                 with ProgressBar():
-                    print("Saving G to zarr: " + self.Jpath)
-                    G = da.to_zarr(
-                        stack,
-                        self.Jpath,
-                        compute=True,
-                        return_stored=True,
-                        overwrite=True,
-                    )
+                    self.client.submit(da.compute, self.client.scatter(mat)).result()
+
+                G = da.from_zarr(self.Jpath)
 
         else:
 
