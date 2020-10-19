@@ -286,13 +286,13 @@ class LinearProblem(BaseProblem):
     def __init__(self, mesh, **kwargs):
         BaseProblem.__init__(self, mesh, **kwargs)
         self.modelMap = kwargs.pop("mapping", Maps.IdentityMap(mesh))
-        if "client" in kwargs.keys():
-            self._client = kwargs["client"]
+        # if "client" in kwargs.keys():
+        #     self._client = kwargs["client"]
 
     @property
     def client(self):
-        if getattr(self, "_client", None) is None:
-            self._client = Client(processes=False)
+        # if getattr(self, "_client", None) is None:
+        #     self._client = Client(processes=False)
 
         return self._client
 
