@@ -1,8 +1,8 @@
 import numpy as np
 import scipy.sparse as sp
 from scipy.constants import mu_0
-
-# from dask.distributed import Client, LocalCluster
+from time import time
+from dask.distributed import Client, LocalCluster
 from .. import Utils
 from .. import Problem
 from .. import Props
@@ -35,6 +35,7 @@ class MagneticIntegral(Problem.LinearProblem):
     parallelized = True
     max_chunk_size = None
     chunk_by_rows = False
+    _client = None
 
     coordinate_system = properties.StringChoice(
         "Type of coordinate system we are regularizing in",
@@ -276,9 +277,14 @@ class MagneticIntegral(Problem.LinearProblem):
 
         else:
 
-            dmudm_v = da.from_array(dmudm * v, chunks=self.G.chunks[1])
+            dmudm_v = dask.delayed(csr.dot)(dmudm.tocsr(), v)
+            dmudm_v = da.from_delayed(
+                dmudm_v, dtype=np.float32, shape=[self.G.shape[1]]
+            )
 
-            Jvec = da.dot(self.G, dmudm_v.astype(np.float32))
+            # dmudm_v = da.from_array(dmudm * v, chunks=self.G.chunks[1])
+
+            Jvec = da.dot(self.G, dmudm_v)
 
         if self.modelType == "amplitude":
             dfdm_Jvec = dask.delayed(csr.dot)(self.dfdm, Jvec)
@@ -473,6 +479,7 @@ class MagneticIntegral(Problem.LinearProblem):
             maxRAM=self.maxRAM,
             max_chunk_size=self.max_chunk_size,
             chunk_by_rows=self.chunk_by_rows,
+            client=self.client,
         )
 
         G = job.calculate()
@@ -495,8 +502,8 @@ class Forward:
     verbose = True
     maxRAM = 1
     chunk_by_rows = False
-
     max_chunk_size = None
+    client = None
     Jpath = "./sensitivity.zarr"
 
     def __init__(self, **kwargs):
@@ -615,7 +622,11 @@ class Forward:
 
                 with ProgressBar():
                     print("Forward calculation: ")
-                    pred = da.dot(stack, self.model).compute()
+                    mat_vec = da.dot(stack, self.model)
+
+                    pred = self.client.submit(
+                        da.compute, self.client.scatter(mat_vec)
+                    ).result()[0]
 
                 return pred
 
@@ -643,16 +654,25 @@ class Forward:
                         print(
                             "Zarr file detected with wrong shape and chunksize ... over-writing"
                         )
+                print(self.client, "Saving G to zarr: " + self.Jpath)
+                ct = time()
+                mat = stack.to_zarr(self.Jpath, compute=False, overwrite=True)
+                # with Client(self.client, processes=False) as client:
+
+                # G = da.to_zarr(
+                #     stack,
+                #     self.Jpath,
+                #     compute=True,
+                #     return_stored=True,
+                #     overwrite=True,
+                # )
 
                 with ProgressBar():
-                    print("Saving G to zarr: " + self.Jpath)
-                    G = da.to_zarr(
-                        stack,
-                        self.Jpath,
-                        compute=True,
-                        return_stored=True,
-                        overwrite=True,
-                    )
+                    self.client.submit(da.compute, self.client.scatter(mat)).result()
+
+                print(f"Runtime {time()-ct}")
+                #
+                G = da.from_zarr(self.Jpath)
 
         else:
 
