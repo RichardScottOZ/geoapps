@@ -385,7 +385,6 @@ class ComboObjectiveFunction(BaseObjectiveFunction):
                 continue
             else:
                 if f is not None and objfct._hasFields:
-
                     H += [multiplier * objfct.deriv2(m, v, f=f[i])]
                 else:
                     H += [multiplier * objfct.deriv2(m, v)]
@@ -394,7 +393,7 @@ class ComboObjectiveFunction(BaseObjectiveFunction):
 
             stack = da.vstack(H)
 
-            return da.sum(stack, axis=0).compute()
+            return da.sum(stack, axis=0)
 
         else:
             sumIt = 0
