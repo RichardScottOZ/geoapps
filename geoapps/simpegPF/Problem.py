@@ -8,7 +8,7 @@ from .Fields import Fields, TimeFields
 from . import Mesh
 from . import Props
 import properties
-
+from dask.distributed import Client
 
 Solver = Utils.SolverUtils.Solver
 
@@ -281,10 +281,25 @@ class LinearProblem(BaseProblem):
     # )
 
     G = None
+    _client = None
 
     def __init__(self, mesh, **kwargs):
         BaseProblem.__init__(self, mesh, **kwargs)
         self.modelMap = kwargs.pop("mapping", Maps.IdentityMap(mesh))
+        if "client" in kwargs.keys():
+            self._client = kwargs["client"]
+
+    @property
+    def client(self):
+        if getattr(self, "_client", None) is None:
+            self._client = Client(processes=False)
+
+        return self._client
+
+    @client.setter
+    def client(self, client):
+        # assert isinstance(client, (Client, None)), f"Provided {client} must be of type {Client}"
+        self._client = client
 
     @property
     def modelMap(self):

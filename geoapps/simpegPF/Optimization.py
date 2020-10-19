@@ -1,8 +1,11 @@
 from . import Utils
+import dask.array as da
 import numpy as np
 import scipy.sparse as sp
 from six import string_types
 from .Utils.SolverUtils import *
+from dask.distributed import Client
+from dask.diagnostics import ProgressBar
 
 norm = np.linalg.norm
 from SimPEG import Regularization
@@ -1092,9 +1095,15 @@ class NewtonRoot:
 
 
 class ProjectedGNCG(BFGS, Minimize, Remember):
+
+    _client = None
+
     def __init__(self, **kwargs):
         Minimize.__init__(self, **kwargs)
         BFGS.__init__(self, **kwargs)
+
+        if "client" in kwargs.keys():
+            self._client = kwargs["client"]
 
     name = "Projected GNCG"
 
@@ -1147,6 +1156,17 @@ class ProjectedGNCG(BFGS, Minimize, Remember):
         return np.logical_or(x <= self.lower, x >= self.upper)
 
     @property
+    def client(self):
+        # if getattr(self, '_client', None) is None:
+        #     self._client = Client(processes=False)
+
+        return self._client
+
+    @client.setter
+    def client(self, client):
+        self._client = client
+
+    @property
     def approxHinv(self):
         """
             The approximate Hessian inverse is used to precondition CG.
@@ -1182,7 +1202,11 @@ class ProjectedGNCG(BFGS, Minimize, Remember):
         resid = -(1 - Active) * self.g
 
         # Currently not fully dask parallel as resid and H*x seperate operations
-        r = np.asarray(resid - (1 - Active) * (self.H * delx))
+        r = np.asarray(
+            resid
+            - (1 - Active)
+            * self.client.submit(da.compute, self.client.scatter(self.H(delx))).result()
+        ).squeeze()
 
         p = self.approxHinv * r
 
@@ -1191,26 +1215,28 @@ class ProjectedGNCG(BFGS, Minimize, Remember):
 
         count = 0
         tc = time()
-        while np.all([np.linalg.norm(r) > self.tolCG, count < self.maxIterCG]):
+        for ii in range(self.maxIterCG):
 
             count += 1
 
-            q = np.asarray((1 - Active) * (self.H * p))
+            q = (1 - Active) * self.H(p)
 
-            alpha = sold / (np.dot(p, q))
+            alpha = sold / (da.dot(p, q.T))
 
-            delx += alpha * p
+            delx = delx + alpha * p
 
-            r -= alpha * q
+            r = r - alpha * q
 
             h = self.approxHinv * r
 
-            snew = np.dot(r, h)
+            snew = da.dot(r, h)
 
             p = h + (snew / sold * p)
 
             sold = snew
 
+        with ProgressBar():
+            delx = self.client.submit(da.compute, self.client.scatter(delx)).result()[0]
             # End CG Iterations
         self.cgCount += count
         # print(f"CG {time() - tc}")

@@ -7,7 +7,7 @@ from . import Optimization
 
 import properties
 import numpy as np
-import scipy.sparse as sp
+from scipy.sparse import csr_matrix as csr
 import gc
 import dask
 import dask.array as da
@@ -41,6 +41,7 @@ class BaseInvProblem(Props.BaseSimPEG):
     deleteTheseOnModelUpdate = []
 
     model = Props.Model("Inversion model.")
+    _client = None
 
     @properties.observer("model")
     def _on_model_update(self, value):
@@ -133,6 +134,17 @@ class BaseInvProblem(Props.BaseSimPEG):
             ), "first warmstart value must be a model."
         self._warmstart = value
 
+    @property
+    def client(self):
+        # if getattr(self, '_client', None) is None:
+        #     self._client = Client(processes=False)
+
+        return self._client
+
+    @client.setter
+    def client(self, client):
+        self._client = client
+
     def getFields(self, m, store=False, deleteWarmstart=True):
         f = None
 
@@ -176,7 +188,9 @@ class BaseInvProblem(Props.BaseSimPEG):
                     dpred += []
                     index += []
 
-            dpred = da.hstack(dpred).compute()
+            dpred = self.client.submit(
+                da.compute, self.client.scatter(da.hstack(dpred))
+            ).result()[0]
             index = np.hstack(index)
 
             return dpred[index]
@@ -194,8 +208,9 @@ class BaseInvProblem(Props.BaseSimPEG):
 
         # if isinstance(self.dmisfit, DataMisfit.BaseDataMisfit):
         phi_d = da.compute(self.dmisfit(m, f=f))[0]
-        self.dpred = da.compute(self.get_dpred(m, f=f))[0]
+        # self.dpred = self.get_dpred(m, f=f)
 
+        # phi_d = np.linalg.norm(self.dmisfit.W * self.dpred)
         phi_m = self.reg(m)
 
         self.phi_d, self.phi_d_last = phi_d, self.phi_d
@@ -203,9 +218,15 @@ class BaseInvProblem(Props.BaseSimPEG):
 
         phi = phi_d + self.beta * phi_m
 
+        reg_deriv2 = self.reg.deriv2(m).tocsr()
+
         out = (phi,)
         if return_g:
-            phi_dDeriv = np.squeeze(da.compute(self.dmisfit.deriv(m, f=f)))
+            phi_dDeriv = np.squeeze(
+                self.client.submit(
+                    da.compute, self.client.scatter(self.dmisfit.deriv(m, f=f))
+                ).result()[0]
+            )
             phi_mDeriv = np.squeeze(self.reg.deriv(m))
 
             g = phi_dDeriv + self.beta * phi_mDeriv
@@ -214,17 +235,19 @@ class BaseInvProblem(Props.BaseSimPEG):
         if return_H:
 
             def H_fun(v):
+                phi_d2Deriv = self.dmisfit.deriv2(m, v, f=f)
+                if isinstance(phi_d2Deriv, dask.array.Array):
+                    dmudm_v = dask.delayed(csr.dot)(reg_deriv2, v)
+                    phi_m2Deriv = da.from_delayed(
+                        dmudm_v, dtype=float, shape=[v.shape[0]]
+                    )
 
-                phi_m2Deriv = np.squeeze(self.reg.deriv2(m, v=v))
-
-                if isinstance(self.dmisfit.deriv2(m, v, f=f), dask.array.Array):
-                    phi_d2Deriv = self.dmisfit.deriv2(m, v, f=f).compute()
                 else:
-
+                    phi_m2Deriv = np.squeeze(self.reg.deriv2(m, v=v))
                     phi_d2Deriv = np.squeeze(self.dmisfit.deriv2(m, v, f=f))
 
                 return phi_d2Deriv + self.beta * phi_m2Deriv
 
-            H = sp.linalg.LinearOperator((m.size, m.size), H_fun, dtype=m.dtype)
+            H = H_fun  # sp.linalg.LinearOperator((m.size, m.size), H_fun, dtype=m.dtype)
             out += (H,)
         return out if len(out) > 1 else out[0]
