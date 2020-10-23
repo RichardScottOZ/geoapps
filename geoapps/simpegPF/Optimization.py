@@ -1238,7 +1238,7 @@ class ProjectedGNCG(BFGS, Minimize, Remember):
         with ProgressBar():
             delx = self.client.submit(da.compute, self.client.scatter(delx)).result()[0]
             # End CG Iterations
-        self.cgCount += count
+        self.cgCount += time() - tc
         # print(f"CG {time() - tc}")
 
         # Take a gradient step on the active cells if exist
