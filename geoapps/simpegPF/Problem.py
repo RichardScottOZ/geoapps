@@ -282,6 +282,7 @@ class LinearProblem(BaseProblem):
 
     G = None
     _client = None
+    _workers = None
 
     def __init__(self, mesh, **kwargs):
         BaseProblem.__init__(self, mesh, **kwargs)
@@ -291,15 +292,19 @@ class LinearProblem(BaseProblem):
 
     @property
     def client(self):
-        # if getattr(self, "_client", None) is None:
-        #     self._client = Client(processes=False)
-
         return self._client
 
     @client.setter
     def client(self, client):
-        # assert isinstance(client, (Client, None)), f"Provided {client} must be of type {Client}"
         self._client = client
+
+    @property
+    def workers(self):
+        return self._workers
+
+    @workers.setter
+    def workers(self, workers):
+        self._workers = workers
 
     @property
     def modelMap(self):

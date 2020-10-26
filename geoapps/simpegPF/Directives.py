@@ -21,9 +21,18 @@ class InversionDirective:
         ObjectiveFunction.ComboObjectiveFunction,
     ]
     _dmisfitPair = [DataMisfit.BaseDataMisfit, ObjectiveFunction.ComboObjectiveFunction]
+    _client = None
 
     def __init__(self, **kwargs):
         Utils.setKwargs(self, **kwargs)
+
+    @property
+    def client(self):
+        return self._client
+
+    @client.setter
+    def client(self, client):
+        self._client = client
 
     @property
     def inversion(self):
@@ -212,8 +221,8 @@ class BetaEstimate_ByEig(InversionDirective):
         x0 = np.random.rand(m.shape[0])
 
         phi_d_deriv = self.dmisfit.deriv2(m, x0, f=f)
-        if isinstance(phi_d_deriv, dask.array.Array):
-            phi_d_deriv = phi_d_deriv.compute()
+        if isinstance(phi_d_deriv, dask.distributed.Future):
+            phi_d_deriv = np.asarray(self.client.gather(phi_d_deriv))
 
         t = np.dot(x0, phi_d_deriv)
         b = np.dot(x0, self.reg.deriv2(m, v=x0))
@@ -807,10 +816,12 @@ class SaveIterationsGeoH5(InversionDirective):
             if getattr(self.dmisfit, "objfcts", None) is not None:
                 dpred = []
                 for local_misfit in self.dmisfit.objfcts:
-                    dpred.append(
-                        np.asarray(local_misfit.survey.dpred(self.invProb.model))
-                    )
-                prop = np.hstack(dpred)
+                    dpred.append(local_misfit.survey.dpred(self.invProb.model))
+
+                if isinstance(dpred[0], dask.distributed.Future):
+                    dpred = self.client.gather(dpred)
+
+                prop = np.asarray(np.hstack(dpred))
             else:
                 prop = self.dmisfit.survey.dpred(self.invProb.model)
         else:

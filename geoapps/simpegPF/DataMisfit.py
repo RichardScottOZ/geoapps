@@ -121,10 +121,15 @@ class l2_DataMisfit(BaseDataMisfit):
         if f is None:
             f = self.prob.fields(m)
 
-        W_res = self.W * self.survey.residual(m, f)
-        # vec = da.from_delayed(W_res, dtype=float, shape=[self.W.shape[1]])
-        #        R = self.W * self.survey.residual(m, f)
-        return 0.5 * da.dot(W_res, W_res)
+        dpred = self.survey.dpred(m, f=f)
+
+        if isinstance(dpred, dask.distributed.Future):
+            residual = self.client.submit(da.subtract, dpred, self.survey.dobs, workers=self.workers)
+            W_res = self.client.submit(da.multiply, self.W, residual, workers=self.workers)
+            return self.client.submit(da.dot, W_res, W_res, workers=self.workers)
+        else:
+            W_res = self.W * (dpred - self.survey.dobs)
+            return 0.5 * np.dot(W_res, W_res)
 
     @Utils.timeIt
     def deriv(self, m, f=None):
@@ -144,9 +149,15 @@ class l2_DataMisfit(BaseDataMisfit):
         if f is None:
             f = self.prob.fields(m)
 
-        w_d = self.W ** 2.0 * self.survey.residual(m, f=f)
+        dpred = self.survey.dpred(m, f=f)
 
-        wtw_d = self.scale * w_d
+        if isinstance(dpred, dask.distributed.Future):
+            residual = self.client.submit(da.subtract, dpred, self.survey.dobs, workers=self.workers)
+            wtw_d = self.client.submit(da.multiply, self.scale * self.W**2.0, residual, workers=self.workers)
+
+        else:
+            w_d = self.W ** 2.0 * self.survey.residual(m, f=f)
+            wtw_d = self.scale * w_d
 
         # row = da.from_delayed(wtw_d, dtype=float, shape=[self.W.shape[0]])
         return self.prob.Jtvec(m, wtw_d, f=f)

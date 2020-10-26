@@ -207,7 +207,7 @@ class BaseInvProblem(Props.BaseSimPEG):
         f = self.getFields(m, store=(return_g is False and return_H is False))
 
         # if isinstance(self.dmisfit, DataMisfit.BaseDataMisfit):
-        phi_d = da.compute(self.dmisfit(m, f=f))[0]
+        phi_d = np.asarray(self.client.gather(self.dmisfit(m, f=f)))
         # self.dpred = self.get_dpred(m, f=f)
 
         # phi_d = np.linalg.norm(self.dmisfit.W * self.dpred)
@@ -223,9 +223,7 @@ class BaseInvProblem(Props.BaseSimPEG):
         out = (phi,)
         if return_g:
             phi_dDeriv = np.squeeze(
-                self.client.submit(
-                    da.compute, self.client.scatter(self.dmisfit.deriv(m, f=f))
-                ).result()[0]
+                self.client.gather(self.dmisfit.deriv(m, f=f))
             )
             phi_mDeriv = np.squeeze(self.reg.deriv(m))
 

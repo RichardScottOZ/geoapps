@@ -33,6 +33,9 @@ class BaseObjectiveFunction(Props.BaseSimPEG):
 
     _nP = None  #: number of parameters
 
+    _client = None
+    _workers = None
+
     def __init__(self, nP=None, **kwargs):
         if nP is not None:
             self._nP = nP
@@ -65,6 +68,25 @@ class BaseObjectiveFunction(Props.BaseSimPEG):
             return self.mapping.shape[0]
         else:
             return self.nP
+
+    @property
+    def client(self):
+        # if getattr(self, '_client', None) is None:
+        #     self._client = Client(processes=False)
+
+        return self._client
+
+    @client.setter
+    def client(self, client):
+        self._client = client
+
+    @property
+    def workers(self):
+        return self._workers
+
+    @workers.setter
+    def workers(self, workers):
+        self._workers = workers
 
     @property
     def mapping(self):
@@ -292,6 +314,8 @@ class ComboObjectiveFunction(BaseObjectiveFunction):
     def __len__(self):
         return self.objfcts.__len__
 
+
+
     @property
     def multipliers(self):
         return self._multipliers
@@ -320,14 +344,26 @@ class ComboObjectiveFunction(BaseObjectiveFunction):
             if multiplier == 0.0:  # don't evaluate the fct
                 continue
             else:
-                if f is not None and objfct._hasFields:
-                    fct += [multiplier * objfct(m, f=f[i])]
+                if self.client is None:
+                    if f is not None and objfct._hasFields:
+                        fct += [multiplier * objfct(m, f=f[i])]
+                    else:
+                        fct += [multiplier * objfct(m)]
                 else:
-                    fct += [multiplier * objfct(m)]
 
-        stack = da.vstack(fct)
+                    if f is not None and objfct._hasFields:
+                        fct += [self.client.submit(da.compute, objfct(multiplier * m, f=f[i]), workers=objfct.workers)]
+                    else:
+                        fct += [self.client.submit(da.compute, objfct(multiplier * m), workers=objfct.workers)]
 
-        return da.sum(stack, axis=0).compute()
+        if isinstance(fct[0], dask.distributed.Future):
+
+            stack = self.client.submit(da.vstack, fct)
+
+            return self.client.submit(da.sum, stack, axis=0)
+
+        else:
+            return np.sum(np.vstack(fct), axis=0).squeeze()
 
     def deriv(self, m, f=None):
         """
@@ -352,14 +388,28 @@ class ComboObjectiveFunction(BaseObjectiveFunction):
             if multiplier == 0.0:  # don't evaluate the fct
                 continue
             else:
-                if f is not None and objfct._hasFields:
-                    g += [multiplier * objfct.deriv(m, f=f[i])]
+                if self.client is None:
+                    if f is not None and objfct._hasFields:
+                        g += [multiplier * objfct.deriv(m, f=f[i])]
+                    else:
+                        g += [multiplier * objfct.deriv(m)]
                 else:
-                    g += [multiplier * objfct.deriv(m)]
+                    if f is not None and objfct._hasFields:
+                        future = self.client.scatter(objfct.deriv(multiplier * m, f=f[i]), workers=objfct.workers)
+                        g += [self.client.submit(da.compute, future, workers=objfct.workers)]
+                    else:
+                        future = self.client.scatter(objfct.deriv(multiplier * m), workers=objfct.workers)
+                        g += [self.client.submit(da.compute, future, workers=objfct.workers)]
 
-        stack = da.vstack(g)
+        if isinstance(g[0], dask.distributed.Future):
 
-        return da.sum(stack, axis=0).compute()
+            stack = self.client.submit(da.vstack, g)
+
+            return self.client.submit(da.sum, stack, axis=0)
+
+        else:
+            return np.sum(np.vstack(g), axis=0).squeeze()
+
 
     def deriv2(self, m, v=None, f=None):
         """
@@ -371,29 +421,30 @@ class ComboObjectiveFunction(BaseObjectiveFunction):
         :param numpy.ndarray v: vector we are multiplying by
         :param SimPEG.Fields f: Fields object (if applicable)
         """
-        # @dask.delayed
-        # def rowSum(arr):
-        #     sumIt = 0
-        #     for i in range(len(arr)):
-        #         sumIt += arr[i]
-        #     return sumIt
-
         H = []
         for i, phi in enumerate(self):
             multiplier, objfct = phi
             if multiplier == 0.0:  # don't evaluate the fct
                 continue
             else:
-                if f is not None and objfct._hasFields:
-                    H += [multiplier * objfct.deriv2(m, v, f=f[i])]
+                if self.client is None:
+                    if f is not None and objfct._hasFields:
+                        H += [multiplier * objfct.deriv2(m, v, f=f[i])]
+                    else:
+                        H += [multiplier * objfct.deriv2(m, v)]
                 else:
-                    H += [multiplier * objfct.deriv2(m, v)]
+                    if f is not None and objfct._hasFields:
+                        future = self.client.scatter(objfct.deriv2(m, multiplier * v, f=f[i]), workers=objfct.workers)
+                        H += [self.client.submit(da.compute,  future, workers=objfct.workers)]
+                    else:
+                        future = self.client.scatter(objfct.deriv2(m, multiplier * v), workers=objfct.workers)
+                        H += [self.client.submit(da.compute, future, workers=objfct.workers)]
 
-        if isinstance(H[0], dask.array.Array):
+        if isinstance(H[0], dask.distributed.Future):
 
-            stack = da.vstack(H)
+            stack = self.client.submit(da.vstack, H)
 
-            return da.sum(stack, axis=0)
+            return self.client.submit(da.sum, stack, axis=0)
 
         else:
             sumIt = 0
