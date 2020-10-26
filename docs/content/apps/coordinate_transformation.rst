@@ -15,11 +15,11 @@ various open file formats.
 
 
 
-.. note:: The latest version of applications can be `downloaded here <https://github.com/MiraGeoscience/geoapps/archive/develop.zip>`_.
+.. note:: Active widgets on this page are for demonstration only.
+
+          The latest version of the application can be `downloaded here <https://github.com/MiraGeoscience/geoapps/archive/develop.zip>`_.
 
           See the :ref:`Installation page <getting_started>` to get started.
-
-          The following list of interactive widgets are for documentation and demonstration purposes only.
 
 
 Input Parameters
@@ -35,7 +35,7 @@ See :ref:`Project panel <workspaceselection>`
 
     from geoapps.processing import CoordinateTransformation
     app = CoordinateTransformation(
-        h5file=r"../assets/FlinFlon.geoh5"
+        h5file=r"../assets/FlinFlon_light.geoh5"
     )
     app.project_panel
 
@@ -51,7 +51,7 @@ List of objects available for reprojection.
             from geoapps.processing import CoordinateTransformation
             from ipywidgets import HBox
             app = CoordinateTransformation(
-                  h5file=r"../assets/FlinFlon.geoh5"
+                  h5file=r"../assets/FlinFlon_light.geoh5"
             )
             app.objects
 
@@ -66,7 +66,7 @@ Input EPSG
     from geoapps.processing import CoordinateTransformation
     from ipywidgets import HBox
     app = CoordinateTransformation(
-          h5file=r"../assets/FlinFlon.geoh5"
+          h5file=r"../assets/FlinFlon_light.geoh5"
     )
     app.epsg_in
 
@@ -82,7 +82,7 @@ Output
     from geoapps.processing import CoordinateTransformation
     from ipywidgets import HBox
     app = CoordinateTransformation(
-          h5file=r"../assets/FlinFlon.geoh5"
+          h5file=r"../assets/FlinFlon_light.geoh5"
     )
     app.epsg_out
 
@@ -98,6 +98,6 @@ See :ref:`Trigger Panel <trigger_panel>` documentation.
     from geoapps.processing import CoordinateTransformation
     from ipywidgets import HBox
     app = CoordinateTransformation(
-          h5file=r"../assets/FlinFlon.geoh5"
+          h5file=r"../assets/FlinFlon_light.geoh5"
     )
     app.trigger_panel

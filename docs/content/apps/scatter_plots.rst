@@ -1,3 +1,5 @@
+.. _scatter_plot:
+
 Scatter Plots
 =============
 
@@ -21,22 +23,19 @@ objects. The application uses the rich graphical interface of
     import plotly.offline as py
 
     app = ScatterPlots(
-          h5file=r"../assets/FlinFlon.geoh5",
+          h5file=r"../assets/FlinFlon_light.geoh5",
           static=True
     )
 
     py.iplot(app.crossplot_fig)
 
 
-.. note:: The latest version of applications can be `downloaded here <https://github.com/MiraGeoscience/geoapps/archive/develop.zip>`_.
+.. note:: Active widgets on this page are for demonstration only.
+
+          The latest version of the application can be `downloaded here <https://github.com/MiraGeoscience/geoapps/archive/develop.zip>`_.
 
           See the :ref:`Installation page <getting_started>` to get started.
 
-
-Parameters
-----------
-
-The following list of interactive widgets are for documentation and demonstration purposes only.
 
 Input data
 ^^^^^^^^^^
@@ -49,7 +48,7 @@ Input data
 
             from geoapps.plotting import ScatterPlots
             app = ScatterPlots(
-                h5file=r"../assets/FlinFlon.geoh5",
+                h5file=r"../assets/FlinFlon_light.geoh5",
                 static=True
             )
             app.project_panel
@@ -65,7 +64,7 @@ Input data
             from geoapps.plotting import ScatterPlots
             from ipywidgets import HBox
             app = ScatterPlots(
-                  h5file=r"../assets/FlinFlon.geoh5",
+                  h5file=r"../assets/FlinFlon_light.geoh5",
                   static=True
             )
             HBox([app.objects, app.data])
@@ -87,7 +86,7 @@ Axes options
 
             from geoapps.plotting import ScatterPlots
             app = ScatterPlots(
-                  h5file=r"../assets/FlinFlon.geoh5",
+                  h5file=r"../assets/FlinFlon_light.geoh5",
                   static=True
             )
             app.axes_pannels
@@ -104,7 +103,7 @@ Axes options
 
             from geoapps.plotting import ScatterPlots
             app = ScatterPlots(
-                  h5file=r"../assets/FlinFlon.geoh5",
+                  h5file=r"../assets/FlinFlon_light.geoh5",
                   static=True
             )
             app._x_panel
@@ -131,7 +130,7 @@ Additional options
 
             from geoapps.plotting import ScatterPlots
             app = ScatterPlots(
-                  h5file=r"../assets/FlinFlon.geoh5",
+                  h5file=r"../assets/FlinFlon_light.geoh5",
                   static=True
             )
             app._color_maps
@@ -146,7 +145,7 @@ Additional options
 
             from geoapps.plotting import ScatterPlots
             app = ScatterPlots(
-                  h5file=r"../assets/FlinFlon.geoh5",
+                  h5file=r"../assets/FlinFlon_light.geoh5",
                   static=True
             )
             app._size_markers
@@ -165,7 +164,7 @@ Additional options
             import plotly.offline as py
 
             app = ScatterPlots(
-                  h5file=r"../assets/FlinFlon.geoh5",
+                  h5file=r"../assets/FlinFlon_light.geoh5",
                   static=True
             )
             app._trigger

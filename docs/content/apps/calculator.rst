@@ -16,11 +16,12 @@ operations or any function from the `Numpy
 
 
 
-.. note:: The latest version of applications can be `downloaded here <https://github.com/MiraGeoscience/geoapps/archive/develop.zip>`_.
+.. note:: Active widgets on this page are for demonstration only.
+
+          The latest version of the application can be `downloaded here <https://github.com/MiraGeoscience/geoapps/archive/develop.zip>`_.
 
           See the :ref:`Installation page <getting_started>` to get started.
 
-          The following list of interactive widgets are for documentation and demonstration purposes only.
 
 Input Parameters
 ----------------
@@ -35,7 +36,7 @@ See :ref:`Project panel <workspaceselection>`
 
     from geoapps.processing import Calculator
     app = Calculator(
-        h5file=r"../assets/FlinFlon.geoh5",
+        h5file=r"../assets/FlinFlon_light.geoh5",
     )
     app.project_panel
 
@@ -52,7 +53,7 @@ List of objects available to pull data from.
     from geoapps.processing import Calculator
     from ipywidgets import HBox
     app = Calculator(
-          h5file=r"../assets/FlinFlon.geoh5",
+          h5file=r"../assets/FlinFlon_light.geoh5",
     )
     app.objects
 
@@ -68,7 +69,7 @@ Add the selected data as a variable and append to the scripting window.
     from geoapps.processing import Calculator
     from ipywidgets import HBox
     app = Calculator(
-          h5file=r"../assets/FlinFlon.geoh5",
+          h5file=r"../assets/FlinFlon_light.geoh5",
     )
     HBox([app.data, app.use])
 
@@ -84,7 +85,7 @@ Add the name as data to the current object. Values of zeros are assigned to the 
     from geoapps.processing import Calculator
     from ipywidgets import HBox
     app = Calculator(
-          h5file=r"../assets/FlinFlon.geoh5",
+          h5file=r"../assets/FlinFlon_light.geoh5",
     )
     HBox([app.channel, app.add])
 
@@ -106,7 +107,7 @@ for clarity but must be surrounded by parentheses ().
     from geoapps.processing import Calculator
     from ipywidgets import HBox
     app = Calculator(
-          h5file=r"../assets/FlinFlon.geoh5",
+          h5file=r"../assets/FlinFlon_light.geoh5",
     )
     app.equation.value = "numpy.log10(var['geochem.Al2O3']) / (var['geochem.CaO']/2 + var['geochem.Cu']**3.)"
     app.equation
@@ -125,7 +126,7 @@ Assign the result to the specified data.
 
     from geoapps.processing import Calculator
     app = Calculator(
-        h5file=r"../assets/FlinFlon.geoh5",
+        h5file=r"../assets/FlinFlon_light.geoh5",
     )
     app.store.data
 
@@ -140,7 +141,7 @@ See :ref:`Trigger panel<trigger_panel>` base applications.
 
     from geoapps.processing import Calculator
     app = Calculator(
-        h5file=r"../assets/FlinFlon.geoh5",
+        h5file=r"../assets/FlinFlon_light.geoh5",
     )
     app.trigger
 
@@ -149,6 +150,6 @@ See :ref:`Trigger panel<trigger_panel>` base applications.
 
     from geoapps.processing import Calculator
     app = Calculator(
-        h5file=r"../assets/FlinFlon.geoh5",
+        h5file=r"../assets/FlinFlon_light.geoh5",
     )
     app.live_link_panel
