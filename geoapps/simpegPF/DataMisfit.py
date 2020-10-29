@@ -152,8 +152,8 @@ class l2_DataMisfit(BaseDataMisfit):
         dpred = self.survey.dpred(m, f=f)
 
         if isinstance(dpred, dask.distributed.Future):
-            residual = self.client.submit(da.subtract, dpred, self.survey.dobs, workers=self.workers)
-            wtw_d = self.client.submit(da.multiply, self.scale * self.W**2.0, residual, workers=self.workers)
+            residual = self.client.submit(da.subtract, dpred, self.survey.dobs)
+            wtw_d = self.client.submit(da.multiply, self.scale * self.W**2.0, residual).result()
 
         else:
             w_d = self.W ** 2.0 * self.survey.residual(m, f=f)
@@ -179,13 +179,13 @@ class l2_DataMisfit(BaseDataMisfit):
             f = self.prob.fields(m)
 
         jtvec = self.prob.Jvec_approx(m, v, f=f)
-
-        w_jtvec = self.W ** 2.0 * jtvec
-
-        wtw_jtvec = self.scale * w_jtvec
+        if isinstance(jtvec, dask.distributed.Future):
+            w_jtvec = self.client.submit(da.multiply, self.scale * self.W ** 2.0, jtvec)
+        else:
+            w_jtvec = (self.scale * self.W ** 2.0) * jtvec
 
         # row = da.from_delayed(wtw_jtvec, dtype=float, shape=[self.W.shape[0]])
-        return self.prob.Jtvec_approx(m, wtw_jtvec, f=f)
+        return self.prob.Jtvec_approx(m, w_jtvec, f=f)
 
 
 # class l1_DataMisfit(l2_DataMisfit):

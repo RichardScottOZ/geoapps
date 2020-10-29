@@ -4,7 +4,7 @@ from . import DataMisfit
 from . import Regularization
 from . import ObjectiveFunction
 from . import Optimization
-
+from time import time
 import properties
 import numpy as np
 from scipy.sparse import csr_matrix as csr
@@ -223,7 +223,7 @@ class BaseInvProblem(Props.BaseSimPEG):
         out = (phi,)
         if return_g:
             phi_dDeriv = np.squeeze(
-                self.client.gather(self.dmisfit.deriv(m, f=f))
+                self.dmisfit.deriv(m, f=f)
             )
             phi_mDeriv = np.squeeze(self.reg.deriv(m))
 
@@ -232,18 +232,29 @@ class BaseInvProblem(Props.BaseSimPEG):
 
         if return_H:
 
+            # if isinstance(v, dask.distributed.Future):
+            #     v = v.result()
+            #
+            # phi_d2Deriv = self.dmisfit.deriv2(m, v, f=f)
+            # if isinstance(phi_d2Deriv, dask.distributed.Future):
+            #     phi_m2Deriv = self.beta * reg_deriv2 * np.asarray(v)
+
             def H_fun(v):
+                # phi_d2Deriv = self.dmisfit.deriv2(m, v, f=f)
+                # if isinstance(phi_d2Deriv, dask.array.Array):
+                #     # future = self.client.scatter(self.beta * reg_deriv2)
+                #     # dmudm_v = self.client.submit(dask.delayed(csr.dot), future, v)
+                #     # phi_m2Deriv = self.client.scatter(da.from_delayed(
+                #     #     dmudm_v, dtype=float, shape=[m.shape[0]])
+                #     # )
+                #     # return self.client.submit(da.add, phi_d2Deriv, phi_m2Deriv).result()
+                #     dmudm_v = dask.delayed(csr.dot)(reg_deriv2, v)
+                #     phi_m2Deriv = da.from_delayed(dmudm_v, dtype=float, shape=[m.shape[0]])
+                #     return phi_d2Deriv + self.beta * phi_m2Deriv
+                #
+                # else:
+                phi_m2Deriv = self.reg.deriv2(m, v=v)
                 phi_d2Deriv = self.dmisfit.deriv2(m, v, f=f)
-                if isinstance(phi_d2Deriv, dask.array.Array):
-                    dmudm_v = dask.delayed(csr.dot)(reg_deriv2, v)
-                    phi_m2Deriv = da.from_delayed(
-                        dmudm_v, dtype=float, shape=[v.shape[0]]
-                    )
-
-                else:
-                    phi_m2Deriv = np.squeeze(self.reg.deriv2(m, v=v))
-                    phi_d2Deriv = np.squeeze(self.dmisfit.deriv2(m, v, f=f))
-
                 return phi_d2Deriv + self.beta * phi_m2Deriv
 
             H = H_fun  # sp.linalg.LinearOperator((m.size, m.size), H_fun, dtype=m.dtype)

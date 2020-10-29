@@ -67,14 +67,14 @@ class StoppingCriteria:
 
     tolerance_g = {
         "str": "%d : |proj(x-g)-x|    = %1.4e <= tolG          = %1.4e",
-        "left": lambda M: norm(M.projection(M.xc - M.g) - M.xc),
+        "left": lambda M: norm(M.projection(M.xc - np.asarray(M.g)) - M.xc),
         "right": lambda M: M.tolG,
         "stopType": "optimal",
     }
 
     norm_g = {
         "str": "%d : |proj(x-g)-x|    = %1.4e <= 1e3*eps       = %1.4e",
-        "left": lambda M: norm(M.projection(M.xc - M.g) - M.xc),
+        "left": lambda M: norm(M.projection(M.xc - np.asarray(M.g)) - M.xc),
         "right": lambda M: 1e3 * M.eps,
         "stopType": "critical",
     }
@@ -115,7 +115,7 @@ class IterationPrinters:
     f = {"title": "f", "value": lambda M: M.f, "width": 10, "format": "%1.2e"}
     norm_g = {
         "title": "|proj(x-g)-x|",
-        "value": lambda M: norm(M.projection(M.xc - M.g) - M.xc),
+        "value": lambda M: norm(M.projection(M.xc - np.asarray(M.g)) - M.xc),
         "width": 15,
         "format": "%1.2e",
     }
@@ -303,7 +303,7 @@ class Minimize:
 
         if not self.silent:
             self.printInit()
-            print("x0 has any nan: {:b}".format(np.any(np.isnan(x0))))
+            # print("x0 has any nan: {:b}".format(np.any(np.isnan(x0))))
         while True:
 
             self.doStartIteration()
@@ -1202,16 +1202,11 @@ class ProjectedGNCG(BFGS, Minimize, Remember):
         resid = -(1 - Active) * self.g
 
         # Currently not fully dask parallel as resid and H*x seperate operations
-        r = np.asarray(
-            resid
-            - (1 - Active)
-            * self.client.submit(da.compute, self.client.scatter(self.H(delx))).result()
-        ).squeeze()
-
+        # Hvec = self.client.compute(self.H(delx))
+        r = resid - (1 - Active) * self.H(delx)
         p = self.approxHinv * r
-
         sold = np.dot(r, p)
-        s0 = sold
+        # s0 = sold
 
         count = 0
         tc = time()
@@ -1219,9 +1214,10 @@ class ProjectedGNCG(BFGS, Minimize, Remember):
 
             count += 1
 
-            q = (1 - Active) * self.H(p)
+            Hp = self.H(p)
+            q = (1 - Active) * Hp
 
-            alpha = sold / (da.dot(p, q.T))
+            alpha = sold / np.dot(p, q.T)
 
             delx = delx + alpha * p
 
@@ -1229,18 +1225,19 @@ class ProjectedGNCG(BFGS, Minimize, Remember):
 
             h = self.approxHinv * r
 
-            snew = da.dot(r, h)
+            snew = np.dot(r, h)
 
-            p = h + (snew / sold * p)
+            p = (h + (snew / sold * p))
 
             sold = snew
+
         print(f"Building CG {time() - tc}")
-        with ProgressBar():
-            delx = self.client.submit(da.compute, self.client.scatter(delx)).result()[0]
+        # with ProgressBar():
+        #     delx = self.client.submit(da.compute, self.client.scatter(delx)).result()[0]
             # End CG Iterations
         self.cgCount += time() - tc
         # print(f"CG {time() - tc}")
-
+        delx = np.asarray(delx)
         # Take a gradient step on the active cells if exist
         if temp != self.xc.size:
 

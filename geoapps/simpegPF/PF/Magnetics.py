@@ -28,7 +28,7 @@ class MagneticIntegral(Problem.LinearProblem):
     actInd = None  #: Active cell indices provided
     M = None  #: Magnetization matrix provided, otherwise all induced
     magType = "H0"
-    verbose = True  # Don't display progress on screen
+    verbose = True  # Don't display ProgressBar on screen
     W = None
     gtgdiag = None
     n_cpu = None
@@ -120,7 +120,8 @@ class MagneticIntegral(Problem.LinearProblem):
             fields = da.dot(self.G, M)
 
         else:
-            fields = self.client.submit(da.dot, self.G, m.astype(np.float32), workers=self.workers)
+            future = self.client.submit(da.dot, self.G, m.astype(np.float32), workers=self.workers)
+            fields = self.client.compute(future.result())
 
         if self.modelType == "amplitude":
 
@@ -143,8 +144,12 @@ class MagneticIntegral(Problem.LinearProblem):
             raise Exception("Need to pair!")
 
         if getattr(self, "_G", None) is None:
+            G = self.Intrgl_Fwr_Op(magType=self.magType)
 
-            self._G = self.Intrgl_Fwr_Op(magType=self.magType)
+            if isinstance(G, dask.distributed.Future):
+                return G
+            else:
+                self._G = G
 
         return self._G
 
@@ -181,13 +186,13 @@ class MagneticIntegral(Problem.LinearProblem):
         self.model = m
         if (self.gtgdiag is None) and (self.modelType != "amplitude"):
 
-            if "load-store" in self.G.name:
-                progress(self.client.submit(self.G))
-
             if W is None:
                 W = np.ones(self.G.shape[1])
 
-            self.gtgdiag = da.sum(da.power(W[:, None].astype(np.float32) * self.G, 2), axis=0).compute()
+            if isinstance(self.G, dask.distributed.Future):
+                self.gtgdiag = da.sum(da.power(W[:, None].astype(np.float32) * self.G.result()[0], 2), axis=0).compute()
+            else:
+                self.gtgdiag = da.sum(da.power(W[:, None].astype(np.float32) * self.G, 2), axis=0).compute()
 
         if self.coordinate_system == "cartesian":
             if self.modelType == "amplitude":
@@ -259,14 +264,23 @@ class MagneticIntegral(Problem.LinearProblem):
 
         else:
 
-            dmudm_v = dask.delayed(csr.dot)(dmudm.tocsr(), v)
-            dmudm_v = da.from_delayed(
-                dmudm_v, dtype=np.float32, shape=[self.G.shape[1]]
-            )
+            # data = self.client.scatter([v, dmudm], workers=self.workers)
+            # Jtjvec = self.client.submit(da.dot, data[0], self.G, workers=self.workers)
+            #
+            # Jtjvec_dmudm = self.client.submit(dask.delayed(csr.dot), Jtjvec, data[1], workers=self.workers)
+            # future = self.client.submit(da.from_delayed, Jtjvec_dmudm, dtype=float, shape=[dmudm.shape[1]])
+
+
+
+            dmudm_v = (dmudm * v).astype(np.float32)
+            # dmudm_v = da.from_delayed(
+            #     dmudm_v, dtype=np.float32, shape=[self.G.shape[1]]
+            # )
 
             # dmudm_v = da.from_array(dmudm * v, chunks=self.G.chunks[1])
-
-            Jvec = da.dot(self.G, dmudm_v)
+            # future = self.client.scatter(da.dot(self.G, dmudm_v), workers=self.workers)
+            # dmudm_v = self.client.scatter(dmudm_v, workers=self.workers)
+            Jvec = self.client.submit(da.dot, self.G, dmudm_v, workers=self.workers) #self.client.submit(da.compute, future, workers=self.workers)
 
         if self.modelType == "amplitude":
             dfdm_Jvec = dask.delayed(csr.dot)(self.dfdm, Jvec)
@@ -282,9 +296,9 @@ class MagneticIntegral(Problem.LinearProblem):
         else:
             dmudm = self.dSdm * self.chiMap.deriv(m)
 
-        if self.modelType == "amplitude":
-            print("Amplitude not implemented")
-            return
+        # if self.modelType == "amplitude":
+        #     print("Amplitude not implemented")
+        #     return
             # dfdm_v = dask.delayed(csr.dot)(v, self.dfdm)
             #
             # vec = da.from_delayed(dfdm_v, dtype=float, shape=[self.dfdm.shape[0]])
@@ -298,13 +312,23 @@ class MagneticIntegral(Problem.LinearProblem):
             # else:
             #     Jtvec = da.dot(vec.astype(np.float32), self.G)
 
-        else:
+        # else:
+        # if isinstance(v, dask.distributed.Future):
+        # v = self.client.scatter(v,  workers=self.workers).result()
+        future = self.client.scatter(dmudm,  workers=self.workers)
+        Jtjvec = self.client.submit(da.dot, v, self.G, workers=self.workers)
 
-            Jtvec = self.client.submit(da.dot, v.astype(np.float32), self.G, workers=self.workers)
+        Jtjvec_dmudm = self.client.submit(dask.delayed(csr.dot), Jtjvec, future, workers=self.workers)
+        h_vec = self.client.submit(da.from_delayed, Jtjvec_dmudm, dtype=float, shape=[dmudm.shape[1]])
 
-        dmudm_v = self.client.submit(dask.delayed(csr.dot), Jtvec, dmudm, workers=self.workers)
+        return self.client.compute(h_vec.result())
 
-        return self.client.submit(da.from_delayed, dmudm_v, dtype=float, shape=[dmudm.shape[1]])
+        # else:
+        #     Jtvec = da.dot(v, self.G)
+        #     dmudm_v = dask.delayed(csr.dot)(Jtvec, dmudm)
+        #     future = self.client.scatter(da.from_delayed(dmudm_v, dtype=float, shape=[dmudm.shape[1]]), workers=self.workers)
+        #
+        #     return self.client.submit(da.compute, future, workers=self.workers)
 
     @property
     def dSdm(self):
@@ -462,6 +486,8 @@ class MagneticIntegral(Problem.LinearProblem):
             maxRAM=self.maxRAM,
             max_chunk_size=self.max_chunk_size,
             chunk_by_rows=self.chunk_by_rows,
+            client=self.client,
+            workers=self.workers
         )
 
         G = job.calculate()
@@ -486,6 +512,8 @@ class Forward:
     chunk_by_rows = False
     max_chunk_size = None
     Jpath = "./sensitivity.zarr"
+    client = None
+    workers = None
 
     def __init__(self, **kwargs):
         super().__init__()
@@ -623,11 +651,6 @@ class Forward:
                             np.r_[G.shape] == np.r_[stack.shape],
                         ]
                     ):
-                        # Check that loaded G matches supplied data and mesh
-                        print(
-                            "Zarr file detected with same shape and chunksize ... re-loading"
-                        )
-
                         return G
                     else:
 
@@ -635,23 +658,16 @@ class Forward:
                             "Zarr file detected with wrong shape and chunksize ... over-writing"
                         )
 
-                mat = stack.to_zarr(self.Jpath, compute=False, return_stored=True, overwrite=True)
-                # with Client(self.client, processes=False) as client:
+                stack = self.client.scatter(stack, workers=self.workers)
+                mat = self.client.submit(da.to_zarr, stack, self.Jpath, compute=True, return_stored=False, overwrite=True, workers=self.workers)
+                return mat#self.client.compute(mat.result(), workers=self.workers)#da.from_zarr(self.Jpath)
+                # print(f"Runtime {time()-ct}")
+                #c
 
-                # G = da.to_zarr(
-                #     stack,
-                #     self.Jpath,
-                #     compute=True,
-                #     return_stored=True,
-                #     overwrite=True,
-                # )
-
+                # mat = stack.to_zarr(self.Jpath, compute=False, return_stored=True, overwrite=True)
                 # with ProgressBar():
                 #     mat.compute()
-                return mat
-                print(f"Runtime {time()-ct}")
-                #
-                # G = da.from_zarr(self.Jpath)
+                # return da.from_zarr(self.Jpath)
 
         else:
 
