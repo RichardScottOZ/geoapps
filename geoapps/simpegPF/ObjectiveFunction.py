@@ -3,6 +3,7 @@ import scipy.sparse as sp
 from six import integer_types
 import warnings
 import dask
+from time import time
 import dask.array as da
 from . import Utils
 from .Tests import checkDerivative
@@ -344,10 +345,29 @@ class ComboObjectiveFunction(BaseObjectiveFunction):
                 continue
             else:
 
-                if f is not None and objfct._hasFields:
-                    fct += [objfct(m, f=f[i])]
+                if self.client is None:
+                    if f is not None and objfct._hasFields:
+                        fct += [objfct(m, f=f[i])]
+                    else:
+                        fct += [objfct(m)]
                 else:
-                    fct += [objfct(m)]
+                    # if not isinstance(m, dask.distributed.Future):
+                    #     m = self.client.scatter(m, broadcast=True)
+
+                    if f is not None and objfct._hasFields:
+                        # if not isinstance(f[i], dask.distributed.Future):
+                        #     f[i] = self.client.scatter(f[i], workers=objfct.workers)
+
+                        row = objfct(m, f=f[i])
+                    else:
+                        row = self.client.submit(objfct, m, workers=objfct.workers)
+
+                    row = self.client.compute(
+                        self.client.submit(da.multiply, multiplier, row).result()
+                    )
+                    fct += [row]
+
+                    # fct += [row]
 
                 multipliers += [multiplier]
                 # else:
@@ -358,15 +378,17 @@ class ComboObjectiveFunction(BaseObjectiveFunction):
                 #     fct += [self.client.submit(da.compute, objfct(multiplier * m), workers=objfct.workers)]
 
         # multipliers = np.r_[mul]
-        if isinstance(fct[0], dask.distributed.Future):
+        if self.client is not None:
 
             # stack = self.client.submit(da.vstack, fct).result()[0]
             #
             # return da.sum(multipliers[:, None] * stack, axis=0)
-            sumIt = da.sum(
-                np.r_[multipliers][:, None] * da.vstack(self.client.gather(fct)), axis=0
+            # sumIt = da.sum(
+            #     np.r_[multipliers][:, None] * da.vstack(self.client.gather(fct)), axis=0
+            # )
+            sumIt = self.client.submit(
+                da.sum, self.client.submit(da.vstack, fct), axis=0
             )
-
             return sumIt
 
         else:
@@ -399,10 +421,32 @@ class ComboObjectiveFunction(BaseObjectiveFunction):
                 continue
             else:
                 # if self.client is None:
-                if f is not None and objfct._hasFields:
-                    g += [objfct.deriv(m, f=f[i])]
+                if self.client is None:
+                    if f is not None and objfct._hasFields:
+                        g += [objfct.deriv(m, f=f[i])]
+                    else:
+                        g += [objfct.deriv(m)]
                 else:
-                    g += [objfct.deriv(m)]
+                    # if not isinstance(m, dask.distributed.Future):
+                    #     m = self.client.scatter(m, broadcast=True)
+
+                    if f is not None and objfct._hasFields:
+
+                        # if not isinstance(f[i], dask.distributed.Future):
+                        #     f[i] = self.client.scatter(f[i], workers=objfct.workers)
+
+                        row = objfct.deriv(m, f=f[i])
+                    else:
+                        row = self.client.submit(
+                            objfct.deriv, m, workers=objfct.workers
+                        )
+
+                    row = self.client.compute(
+                        self.client.submit(da.multiply, multiplier, row).result()
+                    )
+                    g += [row]
+
+                    g += [row]
                 multipliers += [multiplier]
                 # else:
                 #     if f is not None and objfct._hasFields:
@@ -412,14 +456,15 @@ class ComboObjectiveFunction(BaseObjectiveFunction):
                 #         future = self.client.scatter(objfct.deriv(multiplier * m), workers=objfct.workers)
                 #         g += [self.client.submit(da.compute, future, workers=objfct.workers)]
 
-        if isinstance(g[0], dask.distributed.Future):
-            sumIt = 0
-            # for multiplier, future in zip(multipliers, self.client.gather(g)):
-            #     sumIt += multiplier * future
-            sumIt = da.sum(
-                np.r_[multipliers][:, None] * da.vstack(self.client.gather(g)), axis=0
-            )
+        if self.client is not None:
+            # sumIt = 0
+            # # for multiplier, future in zip(multipliers, self.client.gather(g)):
+            # #     sumIt += multiplier * future
+            # sumIt = da.sum(
+            #     np.r_[multipliers][:, None] * da.vstack(self.client.gather(g)), axis=0
+            # )
 
+            sumIt = self.client.submit(da.sum, self.client.submit(da.vstack, g), axis=0)
             return sumIt
 
         else:
@@ -442,11 +487,35 @@ class ComboObjectiveFunction(BaseObjectiveFunction):
             if multiplier == 0.0:  # don't evaluate the fct
                 continue
             else:
-                # if self.client is None:
-                if f is not None and objfct._hasFields:
-                    H += [objfct.deriv2(m, v, f=f[i])]
+                if self.client is None:
+                    if f is not None and objfct._hasFields:
+                        H += [objfct.deriv2(m, v, f=f[i])]
+                    else:
+                        H += [objfct.deriv2(m, v)]
                 else:
-                    H += [objfct.deriv2(m, v)]
+                    # if not isinstance(m, dask.distributed.Future):
+                    #     m = self.client.scatter(m, broadcast=True)
+                    #
+                    # if not isinstance(v, dask.distributed.Future):
+                    #     v = self.client.scatter(v, broadcast=True)
+
+                    # tc = time()
+                    if f is not None and objfct._hasFields:
+
+                        # if not isinstance(f[i], dask.distributed.Future):
+                        #     f[i] = self.client.scatter(f[i], workers=objfct.workers)
+
+                        row = objfct.deriv2(m, v, f=f[i])
+                    else:
+                        row = objfct.deriv2(m, v)
+                    # print(f"Setting comp {time()-tc}")
+
+                    # tc = time()
+                    row = self.client.compute(
+                        self.client.submit(da.multiply, multiplier, row)
+                    )
+                    # print(f"Running comp {time() - tc}")
+                    H += [row]
 
                 multipliers += [multiplier]
                 # else:
@@ -457,13 +526,15 @@ class ComboObjectiveFunction(BaseObjectiveFunction):
                 #         future = self.client.scatter(objfct.deriv2(m, multiplier * v), workers=objfct.workers)
                 #         H += [self.client.submit(da.compute, future, workers=objfct.workers)]
 
-        if isinstance(H[0], dask.distributed.Future):
+        if self.client is not None:
             # sumIt = 0
             # for multiplier, future in zip(multipliers, self.client.gather(H)):
             #     sumIt += multiplier * future
-            sumIt = da.sum(
-                np.r_[multipliers][:, None] * da.vstack(self.client.gather(H)), axis=0
-            )
+            # sumIt = da.sum(
+            #     np.r_[multipliers][:, None] * da.vstack(self.client.gather(H)), axis=0
+            # )
+            sumIt = self.client.submit(da.sum, self.client.submit(da.vstack, H), axis=0)
+            return sumIt
 
         else:
             sumIt = 0

@@ -1215,9 +1215,10 @@ class ProjectedGNCG(BFGS, Minimize, Remember):
             count += 1
 
             Hp = self.H(p)
+            # print(f"Hessian {time() - tc}")
             q = (1 - Active) * Hp
 
-            alpha = sold / np.dot(p, q.T)
+            alpha = sold / da.dot(p, q.T)
 
             delx = delx + alpha * p
 
@@ -1225,13 +1226,13 @@ class ProjectedGNCG(BFGS, Minimize, Remember):
 
             h = self.approxHinv * r
 
-            snew = np.dot(r, h)
+            snew = da.dot(r, h)
 
             p = (h + (snew / sold * p)).compute()
-
+            # print(f"Full cg {time() - tc}")
             sold = snew
 
-        print(f"Building CG {time() - tc}")
+        # print(f"Building CG {time() - tc}")
         # with ProgressBar():
         #     delx = self.client.submit(da.compute, self.client.scatter(delx)).result()[0]
         # End CG Iterations

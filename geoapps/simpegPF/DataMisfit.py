@@ -124,8 +124,12 @@ class l2_DataMisfit(BaseDataMisfit):
         dpred = self.survey.dpred(m, f=f)
 
         if isinstance(dpred, dask.distributed.Future):
-            residual = self.client.submit(da.subtract, dpred, self.survey.dobs, workers=self.workers)
-            W_res = self.client.submit(da.multiply, self.W, residual, workers=self.workers)
+            residual = self.client.submit(
+                da.subtract, dpred, self.survey.dobs, workers=self.workers
+            )
+            W_res = self.client.submit(
+                da.multiply, self.W, residual, workers=self.workers
+            )
             return self.client.submit(da.dot, W_res, W_res, workers=self.workers)
         else:
             W_res = self.W * (dpred - self.survey.dobs)
@@ -153,14 +157,16 @@ class l2_DataMisfit(BaseDataMisfit):
 
         if isinstance(dpred, dask.distributed.Future):
             residual = self.client.submit(da.subtract, dpred, self.survey.dobs)
-            wtw_d = self.client.submit(da.multiply, self.scale * self.W**2.0, residual).result()
+            wtw_d = self.client.submit(
+                da.multiply, self.scale * self.W ** 2.0, residual
+            ).result()
 
         else:
             w_d = self.W ** 2.0 * self.survey.residual(m, f=f)
             wtw_d = self.scale * w_d
 
         # row = da.from_delayed(wtw_d, dtype=float, shape=[self.W.shape[0]])
-        return self.prob.Jtvec(m, wtw_d, f=f)
+        return self.client.compute(self.prob.Jtvec(m, wtw_d, f=f), workers=self.workers)
 
     @Utils.timeIt
     def deriv2(self, m, v, f=None):
@@ -178,14 +184,16 @@ class l2_DataMisfit(BaseDataMisfit):
         if f is None:
             f = self.prob.fields(m)
 
-        jtvec = self.prob.Jvec_approx(m, v, f=f)
+        jtvec = self.client.compute(self.prob.Jvec(m, v, f=f), workers=self.workers)
         if isinstance(jtvec, dask.distributed.Future):
             w_jtvec = self.client.submit(da.multiply, self.scale * self.W ** 2.0, jtvec)
         else:
             w_jtvec = (self.scale * self.W ** 2.0) * jtvec
 
         # row = da.from_delayed(wtw_jtvec, dtype=float, shape=[self.W.shape[0]])
-        return self.prob.Jtvec_approx(m, w_jtvec, f=f)
+        return self.client.compute(
+            self.prob.Jtvec(m, w_jtvec, f=f), workers=self.workers
+        )
 
 
 # class l1_DataMisfit(l2_DataMisfit):

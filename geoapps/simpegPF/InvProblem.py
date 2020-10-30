@@ -206,26 +206,30 @@ class BaseInvProblem(Props.BaseSimPEG):
         # Store fields if doing a line-search
         f = self.getFields(m, store=(return_g is False and return_H is False))
 
+        m_future = self.client.scatter(m, broadcast=True)
+
         # if isinstance(self.dmisfit, DataMisfit.BaseDataMisfit):
-        phi_d = np.asarray(self.client.gather(self.dmisfit(m, f=f)))
+        phi_d = np.asarray(self.dmisfit(m, f=f).result())
         # self.dpred = self.get_dpred(m, f=f)
 
         # phi_d = np.linalg.norm(self.dmisfit.W * self.dpred)
-        phi_m = self.reg(m)
+        reg = self.reg(m)
+
+        if isinstance(reg, dask.distributed.Future):
+            reg = reg.result()
+        phi_m = np.asarray(reg)
 
         self.phi_d, self.phi_d_last = phi_d, self.phi_d
         self.phi_m, self.phi_m_last = phi_m, self.phi_m
 
         phi = phi_d + self.beta * phi_m
 
-        reg_deriv2 = self.reg.deriv2(m).tocsr()
-
         out = (phi,)
         if return_g:
-            phi_dDeriv = np.squeeze(self.dmisfit.deriv(m, f=f))
-            phi_mDeriv = np.squeeze(self.reg.deriv(m))
+            phi_dDeriv = self.dmisfit.deriv(m, f=f)
+            phi_mDeriv = self.reg.deriv(m)
 
-            g = phi_dDeriv + self.beta * phi_mDeriv
+            g = phi_dDeriv.result() + self.beta * phi_mDeriv
             out += (g,)
 
         if return_H:
@@ -251,14 +255,18 @@ class BaseInvProblem(Props.BaseSimPEG):
                 #     return phi_d2Deriv + self.beta * phi_m2Deriv
                 #
                 # else:
-                tc = time()
-                phi_m2Deriv = self.reg.deriv2(m, v=v)
-                print(f"Reg {time()-tc}")
+                v_future = self.client.scatter(v, broadcast=True)
 
-                tc = time()
+                # tc = time()
+                phi_m2Deriv = self.reg.deriv2(m, v=v)
+                # print(f"Reg {time()-tc}")
+                #
+                # tc = time()
                 phi_d2Deriv = self.dmisfit.deriv2(m, v, f=f)
-                print(f"Misfit {time() - tc}")
-                return phi_d2Deriv + self.beta * phi_m2Deriv
+                # print(f"Misfit {time() - tc}")
+
+                H = phi_d2Deriv.result() + self.beta * phi_m2Deriv
+                return H
 
             H = H_fun  # sp.linalg.LinearOperator((m.size, m.size), H_fun, dtype=m.dtype)
             out += (H,)

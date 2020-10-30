@@ -120,11 +120,11 @@ class MagneticIntegral(Problem.LinearProblem):
             fields = da.dot(self.G, M)
 
         else:
-            future = self.client.submit(
-                da.dot, self.G, m.astype(np.float32), workers=self.workers
-            )
-            fields = self.client.compute(future.result())
-
+            # future = self.client.submit(
+            #     da.dot, self.G, m.astype(np.float32), workers=self.workers
+            # )
+            # fields = self.client.compute(future.result())
+            fields = da.dot(self.G, m.astype(np.float32))
         if self.modelType == "amplitude":
 
             fields = self.calcAmpData(fields)
@@ -270,9 +270,7 @@ class MagneticIntegral(Problem.LinearProblem):
             # vec = dask.delayed(csr.dot)(self.Mxyz, dmudm_v)
             M_dmudm_v = da.from_array(self.Mxyz * (dmudm * v), chunks=self.G.chunks[1])
 
-            Jvec = self.client.compute(
-                da.dot(self.G, M_dmudm_v.astype(np.float32)), workers=self.workers
-            )
+            Jvec = da.dot(self.G, M_dmudm_v.astype(np.float32))
 
         else:
 
@@ -290,8 +288,8 @@ class MagneticIntegral(Problem.LinearProblem):
             # dmudm_v = da.from_array(dmudm * v, chunks=self.G.chunks[1])
             # future = self.client.scatter(da.dot(self.G, dmudm_v), workers=self.workers)
             # dmudm_v = self.client.scatter(dmudm_v, workers=self.workers)
-            Jvec = self.client.compute(
-                da.dot(self.G, dmudm_v), workers=self.workers
+            Jvec = da.dot(
+                self.G, dmudm_v
             )  # self.client.submit(da.compute, future, workers=self.workers)
 
         if self.modelType == "amplitude":
@@ -325,19 +323,25 @@ class MagneticIntegral(Problem.LinearProblem):
         #     Jtvec = da.dot(vec.astype(np.float32), self.G)
 
         # else:
-        # if isinstance(v, dask.distributed.Future):
-        # v = self.client.scatter(v,  workers=self.workers).result()
-        future = self.client.scatter(dmudm, workers=self.workers)
-        Jtjvec = self.client.submit(da.dot, v, self.G, workers=self.workers)
+        if isinstance(v, dask.distributed.Future):
+            client = dask.distributed.get_client()
 
-        Jtjvec_dmudm = self.client.submit(
-            dask.delayed(csr.dot), Jtjvec, future, workers=self.workers
-        )
-        h_vec = self.client.submit(
-            da.from_delayed, Jtjvec_dmudm, dtype=float, shape=[dmudm.shape[1]]
-        )
+            Jtjvec = client.submit(da.dot, v, self.G)
+            Jtjvec_dmudm = client.submit(dask.delayed(csr.dot), Jtjvec, dmudm)
+            h_vec = client.submit(
+                da.from_delayed, Jtjvec_dmudm, dtype=float, shape=[dmudm.shape[1]]
+            )
 
-        return self.client.compute(h_vec.result())
+            return client.compute(h_vec.result(), workers=self.workers)
+
+        # future = self.client.scatter(dmudm, workers=self.workers)
+        else:
+            Jtjvec = da.dot(v, self.G)
+
+            Jtjvec_dmudm = dask.delayed(csr.dot)(Jtjvec, dmudm)
+            h_vec = da.from_delayed(Jtjvec_dmudm, dtype=float, shape=[dmudm.shape[1]])
+
+        return h_vec  # self.client.compute(h_vec.result())
 
         # else:
         #     Jtvec = da.dot(v, self.G)

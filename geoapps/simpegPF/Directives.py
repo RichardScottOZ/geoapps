@@ -220,13 +220,17 @@ class BetaEstimate_ByEig(InversionDirective):
 
         x0 = np.random.rand(m.shape[0])
 
-
-        phi_d_deriv = self.dmisfit.deriv2(m, x0, f=f)
+        phi_d_deriv = self.dmisfit.deriv2(m, x0, f=f).result()
         # if isinstance(phi_d_deriv, (dask.array.Array, dask.distributed.Future)):
         #     phi_d_deriv = phi_d_deriv.compute().squeeze()
 
         t = np.dot(x0, phi_d_deriv)
-        b = np.dot(x0, self.reg.deriv2(m, v=x0))
+
+        reg = self.reg.deriv2(m, v=x0)
+        if isinstance(reg, dask.distributed.Future):
+            reg = reg.result()
+
+        b = np.dot(x0, reg)
 
         self.beta0 = self.beta0_ratio * np.asarray(t / b)
 
@@ -879,9 +883,7 @@ class SaveIterationsGeoH5(InversionDirective):
                 dpred = []
                 for local_misfit in self.dmisfit.objfcts:
                     pred = local_misfit.survey.dpred(self.invProb.model)
-                    dpred.append(
-                        pred
-                    )
+                    dpred.append(pred)
 
                 if isinstance(pred, dask.distributed.Future):
                     dpred = self.client.gather(dpred)
@@ -941,7 +943,7 @@ class SaveIterationsGeoH5(InversionDirective):
             iterDict = {"beta": f"{beta:.3e}"}
 
             if isinstance(self.invProb.phi_d, float):
-                phi_d = self.invProb.phi_d
+                phi_d = self.invProb.phi_d[0]
             else:
                 phi_d = self.invProb.phi_d[0]
 
