@@ -1227,14 +1227,14 @@ class ProjectedGNCG(BFGS, Minimize, Remember):
 
             snew = np.dot(r, h)
 
-            p = (h + (snew / sold * p))
+            p = (h + (snew / sold * p)).compute()
 
             sold = snew
 
         print(f"Building CG {time() - tc}")
         # with ProgressBar():
         #     delx = self.client.submit(da.compute, self.client.scatter(delx)).result()[0]
-            # End CG Iterations
+        # End CG Iterations
         self.cgCount += time() - tc
         # print(f"CG {time() - tc}")
         delx = np.asarray(delx)

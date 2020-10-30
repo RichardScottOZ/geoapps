@@ -222,9 +222,7 @@ class BaseInvProblem(Props.BaseSimPEG):
 
         out = (phi,)
         if return_g:
-            phi_dDeriv = np.squeeze(
-                self.dmisfit.deriv(m, f=f)
-            )
+            phi_dDeriv = np.squeeze(self.dmisfit.deriv(m, f=f))
             phi_mDeriv = np.squeeze(self.reg.deriv(m))
 
             g = phi_dDeriv + self.beta * phi_mDeriv
@@ -253,8 +251,13 @@ class BaseInvProblem(Props.BaseSimPEG):
                 #     return phi_d2Deriv + self.beta * phi_m2Deriv
                 #
                 # else:
+                tc = time()
                 phi_m2Deriv = self.reg.deriv2(m, v=v)
+                print(f"Reg {time()-tc}")
+
+                tc = time()
                 phi_d2Deriv = self.dmisfit.deriv2(m, v, f=f)
+                print(f"Misfit {time() - tc}")
                 return phi_d2Deriv + self.beta * phi_m2Deriv
 
             H = H_fun  # sp.linalg.LinearOperator((m.size, m.size), H_fun, dtype=m.dtype)

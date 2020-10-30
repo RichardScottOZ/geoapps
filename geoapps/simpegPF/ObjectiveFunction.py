@@ -314,8 +314,6 @@ class ComboObjectiveFunction(BaseObjectiveFunction):
     def __len__(self):
         return self.objfcts.__len__
 
-
-
     @property
     def multipliers(self):
         return self._multipliers
@@ -339,7 +337,7 @@ class ComboObjectiveFunction(BaseObjectiveFunction):
     def __call__(self, m, f=None):
 
         fct = []
-        mul = []
+        multipliers = []
         for i, phi in enumerate(self):
             multiplier, objfct = phi
             if multiplier == 0.0:  # don't evaluate the fct
@@ -351,23 +349,30 @@ class ComboObjectiveFunction(BaseObjectiveFunction):
                 else:
                     fct += [objfct(m)]
 
-                mul += [multiplier]
+                multipliers += [multiplier]
                 # else:
 
-                    # if f is not None and objfct._hasFields:
-                    #     fct += [self.client.submit(da.compute, objfct(multiplier * m, f=f[i]), workers=objfct.workers)]
-                    # else:
-                    #     fct += [self.client.submit(da.compute, objfct(multiplier * m), workers=objfct.workers)]
+                # if f is not None and objfct._hasFields:
+                #     fct += [self.client.submit(da.compute, objfct(multiplier * m, f=f[i]), workers=objfct.workers)]
+                # else:
+                #     fct += [self.client.submit(da.compute, objfct(multiplier * m), workers=objfct.workers)]
 
-        multipliers = np.r_[mul]
+        # multipliers = np.r_[mul]
         if isinstance(fct[0], dask.distributed.Future):
 
-            stack = self.client.submit(da.vstack, fct).result()[0]
+            # stack = self.client.submit(da.vstack, fct).result()[0]
+            #
+            # return da.sum(multipliers[:, None] * stack, axis=0)
+            sumIt = da.sum(
+                np.r_[multipliers][:, None] * da.vstack(self.client.gather(fct)), axis=0
+            )
 
-            return da.sum(multipliers[:, None] * stack, axis=0)
+            return sumIt
 
         else:
-            return np.sum(multipliers[:, None] * np.vstack(fct), axis=0).squeeze()
+            return np.sum(
+                np.r_[multipliers][:, None] * np.vstack(fct), axis=0
+            ).squeeze()
 
     def deriv(self, m, f=None):
         """
@@ -409,14 +414,16 @@ class ComboObjectiveFunction(BaseObjectiveFunction):
 
         if isinstance(g[0], dask.distributed.Future):
             sumIt = 0
-            for multiplier, future in zip(multipliers, self.client.gather(g)):
-                sumIt += multiplier * future
+            # for multiplier, future in zip(multipliers, self.client.gather(g)):
+            #     sumIt += multiplier * future
+            sumIt = da.sum(
+                np.r_[multipliers][:, None] * da.vstack(self.client.gather(g)), axis=0
+            )
 
             return sumIt
 
         else:
             return np.sum(np.r_[multipliers][:, None] * np.vstack(g), axis=0).squeeze()
-
 
     def deriv2(self, m, v=None, f=None):
         """
@@ -451,9 +458,13 @@ class ComboObjectiveFunction(BaseObjectiveFunction):
                 #         H += [self.client.submit(da.compute, future, workers=objfct.workers)]
 
         if isinstance(H[0], dask.distributed.Future):
-            sumIt = 0
-            for multiplier, future in zip(multipliers, self.client.gather(H)):
-                sumIt += multiplier * future
+            # sumIt = 0
+            # for multiplier, future in zip(multipliers, self.client.gather(H)):
+            #     sumIt += multiplier * future
+            sumIt = da.sum(
+                np.r_[multipliers][:, None] * da.vstack(self.client.gather(H)), axis=0
+            )
+
         else:
             sumIt = 0
             for multiplier, h in zip(multipliers, H):
