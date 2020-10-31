@@ -360,11 +360,12 @@ class ComboObjectiveFunction(BaseObjectiveFunction):
 
                         row = objfct(m, f=f[i])
                     else:
-                        row = self.client.submit(objfct, m, workers=objfct.workers)
+                        row = objfct(m)
 
                     row = self.client.compute(
                         self.client.submit(da.multiply, multiplier, row).result()
                     )
+
                     fct += [row]
 
                     # fct += [row]
@@ -437,9 +438,7 @@ class ComboObjectiveFunction(BaseObjectiveFunction):
 
                         row = objfct.deriv(m, f=f[i])
                     else:
-                        row = self.client.submit(
-                            objfct.deriv, m, workers=objfct.workers
-                        )
+                        row = objfct.deriv(m)
 
                     row = self.client.compute(
                         self.client.submit(da.multiply, multiplier, row).result()

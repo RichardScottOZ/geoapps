@@ -213,10 +213,10 @@ class BaseInvProblem(Props.BaseSimPEG):
         # self.dpred = self.get_dpred(m, f=f)
 
         # phi_d = np.linalg.norm(self.dmisfit.W * self.dpred)
-        reg = self.reg(m)
+        self.reg2Deriv = self.reg.deriv2(m)
 
-        if isinstance(reg, dask.distributed.Future):
-            reg = reg.result()
+        reg = np.linalg.norm(self.reg2Deriv * m)
+
         phi_m = np.asarray(reg)
 
         self.phi_d, self.phi_d_last = phi_d, self.phi_d
@@ -226,8 +226,9 @@ class BaseInvProblem(Props.BaseSimPEG):
 
         out = (phi,)
         if return_g:
+
             phi_dDeriv = self.dmisfit.deriv(m, f=f)
-            phi_mDeriv = self.reg.deriv(m)
+            phi_mDeriv = self.reg2Deriv * m
 
             g = phi_dDeriv.result() + self.beta * phi_mDeriv
             out += (g,)
@@ -258,11 +259,14 @@ class BaseInvProblem(Props.BaseSimPEG):
                 v_future = self.client.scatter(v, broadcast=True)
 
                 # tc = time()
-                phi_m2Deriv = self.reg.deriv2(m, v=v)
+
                 # print(f"Reg {time()-tc}")
                 #
                 # tc = time()
                 phi_d2Deriv = self.dmisfit.deriv2(m, v, f=f)
+
+                phi_m2Deriv = self.reg2Deriv * v
+
                 # print(f"Misfit {time() - tc}")
 
                 H = phi_d2Deriv.result() + self.beta * phi_m2Deriv
