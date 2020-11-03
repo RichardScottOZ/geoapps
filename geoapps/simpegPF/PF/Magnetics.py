@@ -684,7 +684,7 @@ class Forward:
                 # c
 
                 mat = stack.to_zarr(
-                    self.Jpath, compute=False, return_stored=True, overwrite=True
+                    self.Jpath, compute=False, return_stored=False, overwrite=True
                 )
                 with ProgressBar():
                     mat.compute()
