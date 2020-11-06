@@ -441,7 +441,7 @@ class ComboObjectiveFunction(BaseObjectiveFunction):
                         row = objfct.deriv(m)
 
                     row = self.client.compute(
-                        self.client.submit(da.multiply, multiplier, row).result()
+                        self.client.submit(da.multiply, multiplier, row)
                     )
                     g += [row]
 

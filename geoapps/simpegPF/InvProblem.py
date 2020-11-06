@@ -230,7 +230,7 @@ class BaseInvProblem(Props.BaseSimPEG):
             phi_dDeriv = self.dmisfit.deriv(m, f=f)
             phi_mDeriv = self.reg2Deriv * m
 
-            g = phi_dDeriv.result() + self.beta * phi_mDeriv
+            g = np.asarray(phi_dDeriv) + self.beta * phi_mDeriv
             out += (g,)
 
         if return_H:
