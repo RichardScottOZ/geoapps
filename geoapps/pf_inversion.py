@@ -1252,12 +1252,12 @@ def inversion(input_file):
             )
         )
 
-    if vector_property:
-        cool_eps_fact = 1.5
-        prctile = 75
-    else:
-        cool_eps_fact = 1.2
-        prctile = 50
+    # if vector_property:
+    cool_eps_fact = 1.2
+    prctile = 80
+    # else:
+    #     cool_eps_fact = 1.2
+    #     prctile = 50
 
     # Pre-conditioner
     directiveList.append(

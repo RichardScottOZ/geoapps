@@ -184,9 +184,9 @@ class l2_DataMisfit(BaseDataMisfit):
         if f is None:
             f = self.prob.fields(m)
 
-        jtvec = self.client.compute(self.prob.Jvec(m, v, f=f), workers=self.workers)
+        jtvec = self.prob.Jvec(m, v, f=f)
         if isinstance(jtvec, dask.distributed.Future):
-            w_jtvec = self.client.submit(da.multiply, self.scale * self.W ** 2.0, jtvec)
+            w_jtvec = da.multiply(self.scale * self.W ** 2.0, jtvec)
         else:
             w_jtvec = (self.scale * self.W ** 2.0) * jtvec
 
