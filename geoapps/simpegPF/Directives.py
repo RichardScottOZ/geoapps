@@ -220,15 +220,13 @@ class BetaEstimate_ByEig(InversionDirective):
 
         x0 = np.random.rand(m.shape[0])
 
-        phi_d_deriv = self.dmisfit.deriv2(m, x0, f=f).result()
+        phi_d_deriv = self.dmisfit.deriv2(m, x0, f=f)
         # if isinstance(phi_d_deriv, (dask.array.Array, dask.distributed.Future)):
         #     phi_d_deriv = phi_d_deriv.compute().squeeze()
 
         t = np.dot(x0, phi_d_deriv)
 
         reg = self.reg.deriv2(m, v=x0)
-        if isinstance(reg, dask.distributed.Future):
-            reg = reg.result()
 
         b = np.dot(x0, reg)
 

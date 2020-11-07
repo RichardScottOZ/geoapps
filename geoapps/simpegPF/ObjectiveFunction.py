@@ -389,7 +389,7 @@ class ComboObjectiveFunction(BaseObjectiveFunction):
             # )
             sumIt = self.client.submit(
                 da.sum, self.client.submit(da.vstack, fct), axis=0
-            )
+            ).result()
             return sumIt
 
         else:
@@ -463,7 +463,9 @@ class ComboObjectiveFunction(BaseObjectiveFunction):
             #     np.r_[multipliers][:, None] * da.vstack(self.client.gather(g)), axis=0
             # )
 
-            sumIt = self.client.submit(da.sum, self.client.submit(da.vstack, g), axis=0)
+            sumIt = self.client.submit(
+                da.sum, self.client.submit(da.vstack, g), axis=0
+            ).result()
             return sumIt
 
         else:
@@ -532,7 +534,9 @@ class ComboObjectiveFunction(BaseObjectiveFunction):
             # sumIt = da.sum(
             #     np.r_[multipliers][:, None] * da.vstack(self.client.gather(H)), axis=0
             # )
-            sumIt = self.client.submit(da.sum, self.client.submit(da.vstack, H), axis=0)
+            sumIt = self.client.submit(
+                da.sum, self.client.submit(da.vstack, H), axis=0
+            ).result()
             return sumIt
 
         else:

@@ -209,7 +209,7 @@ class BaseInvProblem(Props.BaseSimPEG):
         m_future = self.client.scatter(m, broadcast=True)
 
         # if isinstance(self.dmisfit, DataMisfit.BaseDataMisfit):
-        phi_d = np.asarray(self.dmisfit(m, f=f).result())
+        phi_d = np.asarray(self.dmisfit(m, f=f))
         # self.dpred = self.get_dpred(m, f=f)
 
         # phi_d = np.linalg.norm(self.dmisfit.W * self.dpred)
@@ -269,7 +269,7 @@ class BaseInvProblem(Props.BaseSimPEG):
 
                 # print(f"Misfit {time() - tc}")
 
-                H = phi_d2Deriv.result() + self.beta * phi_m2Deriv
+                H = phi_d2Deriv + self.beta * phi_m2Deriv
                 return H
 
             H = H_fun  # sp.linalg.LinearOperator((m.size, m.size), H_fun, dtype=m.dtype)

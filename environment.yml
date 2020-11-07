@@ -16,6 +16,7 @@ dependencies:
   - scikit-learn
   - h5py
   - zarr
+  - dask
   - fsspec
   - xarray
   - pip:

@@ -142,12 +142,11 @@ def tileSurveyPoints(locs, nRefine, minimize=True, method="cluster"):
 
     if method == "cluster":
         # Best for smaller problems
-        from sklearn.cluster import AgglomerativeClustering
+        from sklearn.cluster import KMeans
 
+        np.random.seed(0)
         # Cluster
-        cluster = AgglomerativeClustering(
-            n_clusters=nRefine, affinity="euclidean", linkage="ward"
-        )
+        cluster = KMeans(n_clusters=nRefine,)
         cluster.fit_predict(locs[:, :2])
 
         # nData in each tile
