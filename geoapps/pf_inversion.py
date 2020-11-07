@@ -19,7 +19,7 @@ import multiprocessing
 from multiprocessing.pool import ThreadPool
 import os
 import sys
-from dask.distributed import Client
+from dask.distributed import Client, LocalCluster, progress
 import dask
 import numpy as np
 from discretize.utils import meshutils
@@ -40,11 +40,12 @@ from geoapps.simpegPF import (
     Optimization,
     Regularization,
     Utils,
+    ObjectiveFunction,
 )
 from geoapps.simpegPF.Utils import matutils, mkvc
 
 
-def inversion(input_file):
+def inversion(input_file, client):
 
     dsep = os.path.sep
     if input_file is not None:
@@ -698,11 +699,11 @@ def inversion(input_file):
         memory footprint false below max_ram
     """
     used_ram = np.inf
-    count = -1
+    count = 0
     while used_ram > max_ram:
-
+        count += 1
         tiles, binCount, tileIDs, tile_numbers = Utils.modelutils.tileSurveyPoints(
-            rxLoc, count, method="ortho"
+            rxLoc, count, method="cluster"
         )
 
         # Grab the largest bin and generate a temporary mesh
@@ -752,8 +753,6 @@ def inversion(input_file):
         used_ram = nDt * nCt * 8.0 * 1e-9
 
         print(f"Tiling: {count}, {int(nDt)} x {int(nCt)} => {used_ram} Gb estimated")
-
-        count += 1
 
         del local_mesh
 
@@ -1065,25 +1064,28 @@ def inversion(input_file):
 
         local_survey.pair(prob)
 
+        G = prob.G
+        if isinstance(G, dask.distributed.Future):
+            future = G
+        else:
+            future = []
+
         if forward_only:
             return local_survey.dpred(mstart)
 
         # Data misfit function
-        local_misfit = DataMisfit.l2_DataMisfit(local_survey)
+        local_misfit = DataMisfit.l2_DataMisfit(
+            local_survey, client=client, workers=None
+        )
         local_misfit.W = 1.0 / local_survey.std
-
-        wr = prob.getJtJdiag(np.ones_like(mstart), W=local_misfit.W)
-
-        # activeCellsTemp = Maps.InjectActiveCells(mesh, activeCells, 1e-8)
-
-        global_weights += wr
 
         del local_mesh
 
-        return local_misfit, global_weights
+        return local_misfit, future
 
     dpred = []
-
+    sensitivities = []
+    global_misfit = []
     for ind, (local_mesh, local_survey) in enumerate(zip(local_meshes, local_surveys)):
 
         if forward_only:
@@ -1092,16 +1094,11 @@ def inversion(input_file):
             )
 
         else:
-            local_misfit, global_weights = create_local_problem(
+            local_misfit, G_future = create_local_problem(
                 local_mesh, local_survey, global_weights, ind
             )
-
-            # Add the problems to a Combo Objective function
-            if ind == 0:
-                global_misfit = local_misfit
-
-            else:
-                global_misfit += local_misfit
+            sensitivities.append(G_future)
+            global_misfit += [local_misfit]
 
     if forward_only:
         dpred = np.hstack(dpred)
@@ -1126,8 +1123,20 @@ def inversion(input_file):
         )
         return None
 
-    # Global sensitivity weights (linear)
-    global_weights = global_weights ** 0.5
+    if any(sensitivities):
+        progress(sensitivities)
+
+    # Global misfit with worker on the main node?
+    global_misfit = ObjectiveFunction.ComboObjectiveFunction(
+        global_misfit, client=client
+    )
+
+    global_weights = []
+    for misfit in global_misfit.objfcts:
+        global_weights.append(misfit.prob.getJtJdiag(np.ones_like(mstart), W=misfit.W))
+
+    stack = np.sum(np.vstack(global_weights), axis=0)
+    global_weights = client.compute(stack) ** 0.5
     global_weights = global_weights / np.max(global_weights)
 
     if "save_to_geoh5" in list(input_dict.keys()):
@@ -1278,7 +1287,7 @@ def inversion(input_file):
 
     if initial_beta is None:
         directiveList.append(
-            Directives.BetaEstimate_ByEig(beta0_ratio=initial_beta_ratio)
+            Directives.BetaEstimate_ByEig(beta0_ratio=initial_beta_ratio, client=client)
         )
 
     directiveList.append(Directives.UpdatePreconditioner())
@@ -1324,6 +1333,7 @@ def inversion(input_file):
                 attribute="predicted",
                 sorting=sorting,
                 save_objective_function=True,
+                client=client,
             )
         )
 
@@ -1538,4 +1548,10 @@ def treemesh_2_octree(workspace, treemesh, parent=None):
 if __name__ == "__main__":
 
     input_file = sys.argv[1]
-    inversion(input_file)
+
+    cluster = LocalCluster(processes=False)
+    client = Client(cluster)
+    dask.config.set({"array.chunk-size": str(128) + "MiB"})
+    dask.config.set(scheduler="threads")
+
+    inversion(input_file, client)
