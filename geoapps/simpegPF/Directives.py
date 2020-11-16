@@ -1020,6 +1020,15 @@ class VectorInversion(InversionDirective):
 
         self.mref = reg.mref
 
+        self.alpha_x, self.alpha_y, self.alpha_z = [], [], []
+        for ind, reg_fun in enumerate(self.reg.objfcts):
+            self.alpha_x += [reg_fun.alpha_x]
+            reg_fun.alpha_x *= 100
+            self.alpha_y += [reg_fun.alpha_y]
+            reg_fun.alpha_y *= 100
+            self.alpha_z += [reg_fun.alpha_z]
+            reg_fun.alpha_z *= 100
+
         for prob in self.prob:
             if getattr(prob, "coordinate_system", None) is not None:
                 prob.coordinate_system = self.mode
@@ -1056,6 +1065,10 @@ class VectorInversion(InversionDirective):
 
                 reg_fun.mref = mref
                 reg_fun.model = mstart
+
+                reg_fun.alpha_x = self.alpha_x[ind]
+                reg_fun.alpha_y = self.alpha_y[ind]
+                reg_fun.alpha_z = self.alpha_z[ind]
 
                 if ind > 0:
                     reg_fun.alpha_s = 0
