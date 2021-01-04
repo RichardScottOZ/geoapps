@@ -1136,19 +1136,25 @@ def calcRow(
     OUTPUT:
 
     """
-    eps = 1e-16  # add a small value to the locations to avoid /0
+    eps = 1e-10  # add a small value to the locations to avoid /0
     # number of cells in mesh
     nC = Xn.shape[0]
-
+    tol2 = 1e-0
     # comp. pos. differences for tne, bsw nodes
-    dz2 = Zn[:, 1] - rxlocation[2] + eps
-    dz1 = Zn[:, 0] - rxlocation[2] + eps
+    dz2 = Zn[:, 1] - rxlocation[2]
+    dz2[np.abs(dz2) < tol2] = tol2
+    dz1 = Zn[:, 0] - rxlocation[2]
+    dz1[np.abs(dz1) < tol2] = tol2
 
-    dy2 = Yn[:, 1] - rxlocation[1] + eps
-    dy1 = Yn[:, 0] - rxlocation[1] + eps
+    dy2 = Yn[:, 1] - rxlocation[1]
+    dy2[np.abs(dy2) < tol2] = tol2
+    dy1 = Yn[:, 0] - rxlocation[1]
+    dy1[np.abs(dy1) < tol2] = tol2
 
-    dx2 = Xn[:, 1] - rxlocation[0] + eps
-    dx1 = Xn[:, 0] - rxlocation[0] + eps
+    dx2 = Xn[:, 1] - rxlocation[0]
+    dx2[np.abs(dx2) < tol2] = tol2
+    dx1 = Xn[:, 0] - rxlocation[0]
+    dx1[np.abs(dx1) < tol2] = tol2
 
     # comp. squared diff
     dx2dx2 = dx2 ** 2.0
@@ -1167,71 +1173,71 @@ def calcRow(
     R4 = dy1dy1 + dx1dx1
 
     # radius to each cell node
-    r1 = np.sqrt(dz2dz2 + R2) + eps
-    r2 = np.sqrt(dz2dz2 + R1) + eps
-    r3 = np.sqrt(dz1dz1 + R1) + eps
-    r4 = np.sqrt(dz1dz1 + R2) + eps
-    r5 = np.sqrt(dz2dz2 + R3) + eps
-    r6 = np.sqrt(dz2dz2 + R4) + eps
-    r7 = np.sqrt(dz1dz1 + R4) + eps
-    r8 = np.sqrt(dz1dz1 + R3) + eps
+    r1 = np.sqrt(dz2dz2 + R2)
+    r2 = np.sqrt(dz2dz2 + R1)
+    r3 = np.sqrt(dz1dz1 + R1)
+    r4 = np.sqrt(dz1dz1 + R2)
+    r5 = np.sqrt(dz2dz2 + R3)
+    r6 = np.sqrt(dz2dz2 + R4)
+    r7 = np.sqrt(dz1dz1 + R4)
+    r8 = np.sqrt(dz1dz1 + R3)
 
     # compactify argument calculations
-    arg1_ = dx1 + dy2 + r1 + eps
-    arg1 = dy2 + dz2 + r1 + eps
-    arg2 = dx1 + dz2 + r1 + eps
-    arg3 = dx1 + r1 + eps
-    arg4 = dy2 + r1 + eps
-    arg5 = dz2 + r1 + eps
+    arg1_ = dx1 + dy2 + r1
+    arg1 = dy2 + dz2 + r1
+    arg2 = dx1 + dz2 + r1
+    arg3 = dx1 + r1
+    arg4 = dy2 + r1
+    arg5 = dz2 + r1
 
-    arg6_ = dx2 + dy2 + r2 + eps
-    arg6 = dy2 + dz2 + r2 + eps
-    arg7 = dx2 + dz2 + r2 + eps
-    arg8 = dx2 + r2 + eps
-    arg9 = dy2 + r2 + eps
-    arg10 = dz2 + r2 + eps
+    arg6_ = dx2 + dy2 + r2
+    arg6 = dy2 + dz2 + r2
+    arg7 = dx2 + dz2 + r2
+    arg8 = dx2 + r2
+    arg9 = dy2 + r2
+    arg10 = dz2 + r2
 
-    arg11_ = dx2 + dy2 + r3 + eps
-    arg11 = dy2 + dz1 + r3 + eps
-    arg12 = dx2 + dz1 + r3 + eps
-    arg13 = dx2 + r3 + eps
-    arg14 = dy2 + r3 + eps
-    arg15 = dz1 + r3 + eps
+    arg11_ = dx2 + dy2 + r3
+    arg11 = dy2 + dz1 + r3
+    arg12 = dx2 + dz1 + r3
+    arg13 = dx2 + r3
+    arg14 = dy2 + r3
+    arg15 = dz1 + r3
 
-    arg16_ = dx1 + dy2 + r4 + eps
-    arg16 = dy2 + dz1 + r4 + eps
-    arg17 = dx1 + dz1 + r4 + eps
-    arg18 = dx1 + r4 + eps
-    arg19 = dy2 + r4 + eps
-    arg20 = dz1 + r4 + eps
+    arg16_ = dx1 + dy2 + r4
+    arg16 = dy2 + dz1 + r4
+    arg17 = dx1 + dz1 + r4
+    arg18 = dx1 + r4
+    arg19 = dy2 + r4
+    arg20 = dz1 + r4
 
-    arg21_ = dx2 + dy1 + r5 + eps
-    arg21 = dy1 + dz2 + r5 + eps
-    arg22 = dx2 + dz2 + r5 + eps
-    arg23 = dx2 + r5 + eps
-    arg24 = dy1 + r5 + eps
-    arg25 = dz2 + r5 + eps
+    arg21_ = dx2 + dy1 + r5
+    arg21 = dy1 + dz2 + r5
+    arg22 = dx2 + dz2 + r5
+    arg23 = dx2 + r5
+    arg24 = dy1 + r5
+    arg25 = dz2 + r5
 
-    arg26_ = dx1 + dy1 + r6 + eps
-    arg26 = dy1 + dz2 + r6 + eps
-    arg27 = dx1 + dz2 + r6 + eps
-    arg28 = dx1 + r6 + eps
-    arg29 = dy1 + r6 + eps
-    arg30 = dz2 + r6 + eps
+    arg26_ = dx1 + dy1 + r6
+    arg26 = dy1 + dz2 + r6
+    arg27 = dx1 + dz2 + r6
+    arg28 = dx1 + r6
+    arg29 = dy1 + r6
+    arg30 = dz2 + r6
 
-    arg31_ = dx1 + dy1 + r7 + eps
-    arg31 = dy1 + dz1 + r7 + eps
-    arg32 = dx1 + dz1 + r7 + eps
-    arg33 = dx1 + r7 + eps
-    arg34 = dy1 + r7 + eps
-    arg35 = dz1 + r7 + eps
+    arg31_ = dx1 + dy1 + r7
+    arg31 = dy1 + dz1 + r7
+    arg32 = dx1 + dz1 + r7
+    arg33 = dx1 + r7
+    arg34 = dy1 + r7
+    arg35 = dz1 + r7
 
-    arg36_ = dx2 + dy1 + r8 + eps
-    arg36 = dy1 + dz1 + r8 + eps
-    arg37 = dx2 + dz1 + r8 + eps
-    arg38 = dx2 + r8 + eps
-    arg39 = dy1 + r8 + eps
-    arg40 = dz1 + r8 + eps
+    arg36_ = dx2 + dy1 + r8
+    arg36 = dy1 + dz1 + r8
+    arg37 = dx2 + dz1 + r8
+    arg38 = dx2 + r8
+    arg39 = dy1 + r8
+    arg40 = dz1 + r8
 
     rows = []
     bxx, byy = [], []
@@ -1422,14 +1428,14 @@ def calcRow(
             bx = np.zeros((1, 3 * nC))
 
             bx[0, 0:nC] = (
-                (-2 * np.arctan2(dx1, arg1))
-                - (-2 * np.arctan2(dx2, arg6))
-                + (-2 * np.arctan2(dx2, arg11))
-                - (-2 * np.arctan2(dx1, arg16))
-                + (-2 * np.arctan2(dx2, arg21))
-                - (-2 * np.arctan2(dx1, arg26))
-                + (-2 * np.arctan2(dx1, arg31))
-                - (-2 * np.arctan2(dx2, arg36))
+                (-2 * np.arctan2(dx1, arg1 + eps))
+                - (-2 * np.arctan2(dx2, arg6 + eps))
+                + (-2 * np.arctan2(dx2, arg11 + eps))
+                - (-2 * np.arctan2(dx1, arg16 + eps))
+                + (-2 * np.arctan2(dx2, arg21 + eps))
+                - (-2 * np.arctan2(dx1, arg26 + eps))
+                + (-2 * np.arctan2(dx1, arg31 + eps))
+                - (-2 * np.arctan2(dx2, arg36 + eps))
             )
             bx[0, nC : 2 * nC] = (
                 np.log(arg5)
@@ -1465,14 +1471,14 @@ def calcRow(
                 - np.log(arg40)
             )
             by[0, nC : 2 * nC] = (
-                (-2 * np.arctan2(dy2, arg2))
-                - (-2 * np.arctan2(dy2, arg7))
-                + (-2 * np.arctan2(dy2, arg12))
-                - (-2 * np.arctan2(dy2, arg17))
-                + (-2 * np.arctan2(dy1, arg22))
-                - (-2 * np.arctan2(dy1, arg27))
-                + (-2 * np.arctan2(dy1, arg32))
-                - (-2 * np.arctan2(dy1, arg37))
+                (-2 * np.arctan2(dy2, arg2 + eps))
+                - (-2 * np.arctan2(dy2, arg7 + eps))
+                + (-2 * np.arctan2(dy2, arg12 + eps))
+                - (-2 * np.arctan2(dy2, arg17 + eps))
+                + (-2 * np.arctan2(dy1, arg22 + eps))
+                - (-2 * np.arctan2(dy1, arg27 + eps))
+                + (-2 * np.arctan2(dy1, arg32 + eps))
+                - (-2 * np.arctan2(dy1, arg37 + eps))
             )
             by[0, 2 * nC :] = (
                 (np.log(arg3) - np.log(arg8))
@@ -1505,14 +1511,14 @@ def calcRow(
                 + (np.log(arg33) - np.log(arg38))
             )
             bz[0, 2 * nC :] = (
-                (-2 * np.arctan2(dz2, arg1_))
-                - (-2 * np.arctan2(dz2, arg6_))
-                + (-2 * np.arctan2(dz1, arg11_))
-                - (-2 * np.arctan2(dz1, arg16_))
-                + (-2 * np.arctan2(dz2, arg21_))
-                - (-2 * np.arctan2(dz2, arg26_))
-                + (-2 * np.arctan2(dz1, arg31_))
-                - (-2 * np.arctan2(dz1, arg36_))
+                (-2 * np.arctan2(dz2, arg1_ + eps))
+                - (-2 * np.arctan2(dz2, arg6_ + eps))
+                + (-2 * np.arctan2(dz1, arg11_ + eps))
+                - (-2 * np.arctan2(dz1, arg16_ + eps))
+                + (-2 * np.arctan2(dz2, arg21_ + eps))
+                - (-2 * np.arctan2(dz2, arg26_ + eps))
+                + (-2 * np.arctan2(dz1, arg31_ + eps))
+                - (-2 * np.arctan2(dz1, arg36_ + eps))
             )
             bz /= -4 * np.pi
 
